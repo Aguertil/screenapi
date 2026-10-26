@@ -91,7 +91,7 @@ describe('UrlValidator', () => {
       });
 
       describe('link-local addresses', () => {
-        it.each(['http://169.254.0.1', 'http://169.254.169.254'])('should reject %s', (url) => {
+        it.each(['http://169.254.0.1', 'http://169.254.100.100'])('should reject %s', (url) => {
           const result = UrlValidator.validate(url);
           expect(result.success).toBe(false);
           if (!result.success) {

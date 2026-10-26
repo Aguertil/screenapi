@@ -35,6 +35,17 @@ export class UrlValidator {
   private static checkSSRF(url: URL): Result<void, ValidationError> {
     const hostname = url.hostname.toLowerCase();
 
+    // Block cloud metadata services FIRST (most specific)
+    const blockedMetadata = [
+      '169.254.169.254', // AWS, Azure, GCP, etc.
+      'metadata.google.internal',
+      'metadata',
+    ];
+
+    if (blockedMetadata.includes(hostname)) {
+      return failure(new ValidationError('Metadata service URLs are not allowed'));
+    }
+
     // Block localhost and loopback
     if (
       hostname === 'localhost' ||
@@ -66,7 +77,7 @@ export class UrlValidator {
       return failure(new ValidationError('Private IP addresses are not allowed'));
     }
 
-    // 169.254.0.0/16 (link-local)
+    // 169.254.0.0/16 (link-local) - after metadata check
     if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
       return failure(new ValidationError('Link-local addresses are not allowed'));
     }
@@ -101,17 +112,6 @@ export class UrlValidator {
       hostname.endsWith('.local')
     ) {
       return failure(new ValidationError('Internal infrastructure domains are not allowed'));
-    }
-
-    // Block cloud metadata services
-    const blockedMetadata = [
-      '169.254.169.254', // AWS, Azure, GCP, etc.
-      'metadata.google.internal',
-      'metadata',
-    ];
-
-    if (blockedMetadata.includes(hostname)) {
-      return failure(new ValidationError('Metadata service URLs are not allowed'));
     }
 
     // Block @ in URL (potential bypass attempt)

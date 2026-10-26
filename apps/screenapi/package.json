@@ -1,0 +1,39 @@
+{
+  "name": "screenapi",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 43210",
+    "build": "prisma generate && next build",
+    "start": "next start -p 43210",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:unit": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "clean": "rm -rf .next .turbo node_modules"
+  },
+  "dependencies": {
+    "@repo/database": "workspace:*",
+    "@repo/shared-types": "workspace:*",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "playwright-core": "^1.64.1",
+    "ioredis": "^6.0.0",
+    "zod": "^4.6.7",
+    "bcryptjs": "^3.0.3"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.11.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@playwright/test": "^1.64.1",
+    "@vitest/coverage-v8": "^1.2.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}

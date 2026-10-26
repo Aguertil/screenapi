@@ -1,0 +1,216 @@
+// Prisma Schema for B2B SaaS Platform
+// Supports: ScreenAPI & URL Shortener
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// SHARED MODELS (User, Subscription, etc.)
+// ============================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String?
+  emailVerified DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  apiKeys       ApiKey[]
+  subscriptions Subscription[]
+  
+  // ScreenAPI specific
+  screenshots   Screenshot[]
+  screenshotUsageLogs ScreenshotUsageLog[]
+  
+  // URL Shortener specific
+  shortUrls     ShortUrl[]
+  urlAnalytics  UrlAnalytics[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  userId      String
+  key         String    @unique
+  name        String
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  rateLimit   Int       @default(60)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  screenshotUsageLogs ScreenshotUsageLog[]
+
+  @@index([userId])
+  @@index([key])
+  @@index([isActive])
+  @@map("api_keys")
+}
+
+model Subscription {
+  id                      String   @id @default(cuid())
+  userId                  String
+  plan                    String   // FREE, PRO, ENTERPRISE
+  status                  String   // ACTIVE, CANCELED, EXPIRED, TRIALING
+  creditsTotal            Int      @default(0)
+  creditsUsed             Int      @default(0)
+  creditsRemaining        Int      @default(0)
+  stripeCustomerId        String?  @unique
+  stripeSubscriptionId    String?  @unique
+  stripePriceId           String?
+  stripeCurrentPeriodEnd  DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stripeCustomerId])
+  @@index([stripeSubscriptionId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+// ============================================
+// SCREENAPI MODELS
+// ============================================
+
+model Screenshot {
+  id              String   @id @default(cuid())
+  userId          String
+  url             String
+  storageUrl      String?
+  storageKey      String?
+  format          String   // PNG, JPEG, WEBP
+  width           Int
+  height          Int
+  fileSizeBytes   Int
+  viewportType    String   // DESKTOP, MOBILE, TABLET, CUSTOM
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@map("screenshots")
+}
+
+model ScreenshotUsageLog {
+  id              String    @id @default(cuid())
+  userId          String
+  apiKeyId        String?
+  url             String
+  status          String    // SUCCESS, FAILED, RATE_LIMITED
+  format          String?
+  viewportType    String?
+  viewportWidth   Int?
+  viewportHeight  Int?
+  fullPage        Boolean?
+  waitForSelector String?
+  hideElements    String?
+  durationMs      Int?
+  fileSizeBytes   Int?
+  creditsUsed     Int       @default(0)
+  errorMessage    String?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime  @default(now())
+
+  // Relations
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiKey ApiKey? @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([apiKeyId])
+  @@index([createdAt])
+  @@index([status])
+  @@map("screenshot_usage_logs")
+}
+
+// ============================================
+// URL SHORTENER MODELS
+// ============================================
+
+model ShortUrl {
+  id            String    @id @default(cuid())
+  userId        String
+  slug          String    @unique
+  originalUrl   String
+  customDomain  String?
+  title         String?
+  description   String?
+  passwordHash  String?   // For password-protected links
+  expiresAt     DateTime?
+  clicksCount   Int       @default(0)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analytics UrlAnalytics[]
+
+  @@index([userId])
+  @@index([slug])
+  @@index([customDomain])
+  @@index([createdAt])
+  @@index([isActive])
+  @@map("short_urls")
+}
+
+model UrlAnalytics {
+  id          String   @id @default(cuid())
+  shortUrlId  String
+  userId      String
+  country     String?
+  city        String?
+  region      String?
+  ipAddress   String?
+  userAgent   String?
+  referer     String?
+  device      String?  // mobile, desktop, tablet
+  os          String?  // iOS, Android, Windows, etc.
+  browser     String?  // Chrome, Safari, Firefox, etc.
+  clickedAt   DateTime @default(now())
+
+  // Relations
+  shortUrl ShortUrl @relation(fields: [shortUrlId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([shortUrlId])
+  @@index([userId])
+  @@index([clickedAt])
+  @@index([country])
+  @@index([device])
+  @@map("url_analytics")
+}
+
+model QrCode {
+  id         String   @id @default(cuid())
+  shortUrl   String   @unique
+  imageUrl   String
+  format     String   // PNG, SVG
+  size       Int      // pixels
+  createdAt  DateTime @default(now())
+
+  @@index([shortUrl])
+  @@map("qr_codes")
+}

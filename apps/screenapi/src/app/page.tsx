@@ -11,6 +11,9 @@ export default function HomePage() {
               <span className="text-2xl font-bold text-white">ScreenAPI</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
+              <Link href="/playground" className="text-gray-300 hover:text-white transition">
+                Playground
+              </Link>
               <Link href="/docs" className="text-gray-300 hover:text-white transition">
                 Documentation
               </Link>

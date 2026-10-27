@@ -1,6 +1,9 @@
-export const metadata = {
-  title: 'ScreenAPI - Screenshot API Service',
-  description: 'Professional screenshot API for web pages',
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "ScreenAPI - Professional Screenshot API",
+  description: "Capture high-quality screenshots of any website with our powerful API",
 };
 
 export default function RootLayout({
@@ -10,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

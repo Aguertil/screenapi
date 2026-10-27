@@ -433,31 +433,51 @@ Returns:
 
 ## 🚀 Deployment
 
-### Prerequisites
-- Node.js 20+
-- PostgreSQL 14+
-- Redis (optional)
-
-### Environment Setup
-
-1. Set production environment variables
-2. Run database migrations
-3. Build the application
-4. Start the production server
+### Quick Deploy to Fly.io (Recommended)
 
 ```bash
-# Build
-pnpm --filter screenapi build
-
-# Start
-pnpm --filter screenapi start
+# Run automated deployment script
+./scripts/deploy-fly.sh
 ```
 
+The script will:
+1. Install Fly CLI
+2. Create PostgreSQL database
+3. Create Redis (optional)
+4. Deploy application
+5. Run migrations
+
+**Manual deployment:** See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
 ### Recommended Platforms
-- [Vercel](https://vercel.com/) (Next.js native)
-- [Fly.io](https://fly.io/) (full control)
-- [Railway](https://railway.app/) (easy setup)
-- [Render](https://render.com/) (batteries included)
+
+| Platform | Best For | Playwright Support | Cost |
+|----------|----------|-------------------|------|
+| **Fly.io** ⭐ | Full control, Docker | ✅ Excellent | ~$30-50/mo |
+| **Railway** | Easy setup | ✅ Good | ~$20-40/mo |
+| **Render** | Simplicity | ✅ Good | ~$32-40/mo |
+| **Vercel** | Next.js apps | ⚠️ Limited | Free-$20/mo |
+
+**Note:** Playwright requires a VM-based platform (not serverless). Fly.io, Railway, or Render recommended.
+
+### Local Development with Docker
+
+```bash
+# Start PostgreSQL and Redis
+docker-compose up -d
+
+# Copy environment file
+cp .env.example .env
+
+# Install dependencies
+pnpm install
+
+# Push database schema
+pnpm --filter @repo/database db:push
+
+# Start development
+pnpm --filter screenapi dev
+```
 
 ---
 

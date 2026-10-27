@@ -3,14 +3,5 @@
   "buildCommand": "pnpm install && pnpm --filter screenapi build",
   "installCommand": "pnpm install",
   "outputDirectory": "apps/screenapi/.next",
-  "framework": "nextjs",
-  "functions": {
-    "apps/screenapi/src/app/api/**/*.ts": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  },
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "framework": "nextjs"
 }

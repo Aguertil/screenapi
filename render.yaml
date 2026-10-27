@@ -22,12 +22,6 @@ services:
         fromDatabase:
           name: screenapi-db
           property: connectionString
-      # Redis is optional - comment out if not needed
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: screenapi-redis
-          property: connectionString
 
 databases:
   # PostgreSQL Database
@@ -37,11 +31,3 @@ databases:
     region: frankfurt
     plan: starter # 1GB storage, 0.5GB RAM
     ipAllowList: [] # Allow all (or restrict to your IPs)
-
-  # Redis (optional - comment out if not needed)
-  - name: screenapi-redis
-    type: redis
-    region: frankfurt
-    plan: starter # 256MB
-    maxmemoryPolicy: allkeys-lru
-    ipAllowList: []

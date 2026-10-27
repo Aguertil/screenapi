@@ -433,32 +433,33 @@ Returns:
 
 ## 🚀 Deployment
 
-### Quick Deploy to Fly.io (Recommended)
+### ⚡ Quick Deploy to Render (5 minutes)
 
-```bash
-# Run automated deployment script
-./scripts/deploy-fly.sh
-```
+**If your GitHub is already connected to Render:**
 
-The script will:
-1. Install Fly CLI
-2. Create PostgreSQL database
-3. Create Redis (optional)
-4. Deploy application
-5. Run migrations
+1. Go to: https://dashboard.render.com/select-repo?type=blueprint
+2. Select this repository
+3. Click "Apply"
+4. Wait ~15 minutes
+5. ✅ **Done!** Your API is live
 
-**Manual deployment:** See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+**Detailed guide:** See [DEPLOY_NOW.md](DEPLOY_NOW.md) (step-by-step with screenshots)
 
-### Recommended Platforms
+### Alternative Platforms
 
-| Platform | Best For | Playwright Support | Cost |
-|----------|----------|-------------------|------|
-| **Fly.io** ⭐ | Full control, Docker | ✅ Excellent | ~$30-50/mo |
-| **Railway** | Easy setup | ✅ Good | ~$20-40/mo |
-| **Render** | Simplicity | ✅ Good | ~$32-40/mo |
-| **Vercel** | Next.js apps | ⚠️ Limited | Free-$20/mo |
+| Platform | Best For | Setup | Playwright | Cost/mo |
+|----------|----------|-------|------------|---------|
+| **Render** ⭐ | GitHub integration | 5 min | ✅ Excellent | $32-39 |
+| **Fly.io** | Full control | 10 min | ✅ Excellent | $30-50 |
+| **Railway** | Easy setup | 5 min | ✅ Good | $20-40 |
+| **Vercel** | Next.js apps | 2 min | ⚠️ Limited | $0-20 |
 
-**Note:** Playwright requires a VM-based platform (not serverless). Fly.io, Railway, or Render recommended.
+**Guides:**
+- 🚀 [DEPLOY_NOW.md](DEPLOY_NOW.md) - Render quick start (recommended)
+- 📚 [DEPLOYMENT.md](DEPLOYMENT.md) - All platforms detailed guide
+- 🐳 [RENDER_DEPLOY.md](RENDER_DEPLOY.md) - Render complete guide
+
+**Note:** Playwright requires VM-based hosting (Docker). Not compatible with pure serverless (like Vercel Functions).
 
 ### Local Development with Docker
 

@@ -1,0 +1,46 @@
+# Render Blueprint for ScreenAPI
+# This file defines all services needed for deployment
+
+services:
+  # Main Web Service
+  - type: web
+    name: screenapi-prod
+    runtime: docker
+    dockerfilePath: ./apps/screenapi/Dockerfile
+    dockerContext: .
+    region: frankfurt # EU region (closest to France)
+    plan: standard # 2GB RAM, required for Playwright
+    branch: main
+    healthCheckPath: /api/health
+    autoDeploy: true # Auto-deploy on git push
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 43210
+      - key: DATABASE_URL
+        fromDatabase:
+          name: screenapi-db
+          property: connectionString
+      # Redis is optional - comment out if not needed
+      - key: REDIS_URL
+        fromDatabase:
+          name: screenapi-redis
+          property: connectionString
+
+databases:
+  # PostgreSQL Database
+  - name: screenapi-db
+    databaseName: screenapi
+    user: screenapi
+    region: frankfurt
+    plan: starter # 1GB storage, 0.5GB RAM
+    ipAllowList: [] # Allow all (or restrict to your IPs)
+
+  # Redis (optional - comment out if not needed)
+  - name: screenapi-redis
+    type: redis
+    region: frankfurt
+    plan: starter # 256MB
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []

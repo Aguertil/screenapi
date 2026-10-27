@@ -2,20 +2,25 @@
 FROM node:20-slim AS builder
 
 # Install OpenSSL for Prisma
-RUN apt-get update -y && apt-get install -y openssl
+RUN apt-get update -y && apt-get install -y openssl ca-certificates
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy workspace files
-COPY package.json pnpm-workspace.yaml pnpm-lock.yaml turbo.json ./
+# Copy root workspace files
+COPY package.json pnpm-workspace.yaml turbo.json ./
+
+# Copy lockfile if exists (Render might not have it)
+COPY pnpm-lock.yaml* ./
+
+# Copy all packages
 COPY packages ./packages
 COPY apps/screenapi ./apps/screenapi
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile || pnpm install
 
 # Generate Prisma Client
 RUN pnpm --filter @repo/database db:generate

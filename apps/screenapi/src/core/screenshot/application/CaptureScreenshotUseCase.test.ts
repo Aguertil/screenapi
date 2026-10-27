@@ -6,7 +6,7 @@ import type { ISubscriptionRepository, SubscriptionData } from './interfaces/ISu
 import type { IScreenshotRepository } from './interfaces/IScreenshotRepository';
 import type { IRateLimiter, RateLimitResult } from './interfaces/IRateLimiter';
 import type { IUsageLogger } from './interfaces/IUsageLogger';
-import { success, failure } from '@repo/shared-types';
+import { success, failure, SubscriptionPlan, SubscriptionStatus } from '@repo/shared-types';
 
 // Mock implementations
 class MockScreenshotService implements IScreenshotService {
@@ -38,7 +38,7 @@ class MockApiKeyRepository implements IApiKeyRepository {
     expiresAt: null,
   };
 
-  async findByKey(key: string) {
+  async findByKey(_key: string) {
     return this.apiKey;
   }
 
@@ -53,8 +53,8 @@ class MockSubscriptionRepository implements ISubscriptionRepository {
   subscription: SubscriptionData | null = {
     id: 'sub-123',
     userId: 'user-123',
-    plan: 'PRO' as const,
-    status: 'ACTIVE' as const,
+    plan: 'PRO' as SubscriptionPlan,
+    status: 'ACTIVE' as SubscriptionStatus,
     creditsTotal: 5000,
     creditsUsed: 100,
     creditsRemaining: 4900,
@@ -294,7 +294,7 @@ describe('CaptureScreenshotUseCase', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.code).toBe('RATE_LIMIT_EXCEEDED');
+        expect((result.error as any).code).toBe('RATE_LIMIT_EXCEEDED');
       }
     });
 
@@ -339,8 +339,8 @@ describe('CaptureScreenshotUseCase', () => {
       mockSubscriptionRepository.subscription = {
         id: 'sub-123',
         userId: 'user-123',
-        plan: 'PRO' as const,
-        status: 'CANCELED' as const,
+        plan: 'PRO' as SubscriptionPlan,
+        status: 'CANCELED' as SubscriptionStatus,
         creditsTotal: 5000,
         creditsUsed: 5000,
         creditsRemaining: 0,
@@ -365,8 +365,8 @@ describe('CaptureScreenshotUseCase', () => {
       mockSubscriptionRepository.subscription = {
         id: 'sub-123',
         userId: 'user-123',
-        plan: 'PRO' as const,
-        status: 'ACTIVE' as const,
+        plan: 'PRO' as SubscriptionPlan,
+        status: 'ACTIVE' as SubscriptionStatus,
         creditsTotal: 5000,
         creditsUsed: 5000,
         creditsRemaining: 0,
@@ -381,7 +381,7 @@ describe('CaptureScreenshotUseCase', () => {
 
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.code).toBe('INSUFFICIENT_CREDITS');
+        expect((result.error as any).code).toBe('INSUFFICIENT_CREDITS');
       }
     });
   });

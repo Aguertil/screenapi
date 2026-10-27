@@ -81,7 +81,12 @@ export class PrismaScreenshotRepository implements IScreenshotRepository {
       console.error('Error finding screenshots:', error);
       return {
         data: [],
-        pagination: { page, limit, total: 0, totalPages: 0 },
+        pagination: {
+          page: pagination.page,
+          limit: pagination.limit,
+          total: 0,
+          totalPages: 0,
+        },
       };
     }
   }

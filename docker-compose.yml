@@ -31,6 +31,28 @@ services:
       timeout: 3s
       retries: 5
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: screenapi-app
+    ports:
+      - "43210:43210"
+    environment:
+      DATABASE_URL: "postgresql://screenapi:screenapi_dev_password@postgres:5432/screenapi"
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: "development"
+      NEXT_PUBLIC_API_URL: "http://localhost:43210"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+
   # Optional: pgAdmin for database management
   pgadmin:
     image: dpage/pgadmin4:latest

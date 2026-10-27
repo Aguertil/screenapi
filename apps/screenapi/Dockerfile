@@ -1,26 +1,21 @@
 # Build stage
 FROM node:20-slim AS builder
 
-# Install OpenSSL for Prisma
-RUN apt-get update -y && apt-get install -y openssl ca-certificates
+# Install dependencies
+RUN apt-get update -y && \
+    apt-get install -y openssl ca-certificates python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
 
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy root workspace files
-COPY package.json pnpm-workspace.yaml turbo.json ./
-
-# Copy lockfile if exists (Render might not have it)
-COPY pnpm-lock.yaml* ./
-
-# Copy all packages
-COPY packages ./packages
-COPY apps/screenapi ./apps/screenapi
+# Copy all workspace files
+COPY . .
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install
 
 # Generate Prisma Client
 RUN pnpm --filter @repo/database db:generate
@@ -31,7 +26,7 @@ RUN pnpm --filter screenapi build
 # Production stage
 FROM node:20-slim AS runner
 
-# Install dependencies for Playwright
+# Install Playwright dependencies
 RUN apt-get update -y && \
     apt-get install -y \
     openssl \
@@ -55,22 +50,29 @@ RUN apt-get update -y && \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
+    wget \
     && rm -rf /var/lib/apt/lists/*
-
-# Enable pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
 
 WORKDIR /app
 
-# Copy built application
-COPY --from=builder /app/apps/screenapi/.next/standalone ./
-COPY --from=builder /app/apps/screenapi/.next/static ./apps/screenapi/.next/static
-COPY --from=builder /app/apps/screenapi/public ./apps/screenapi/public
-COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
+# Copy package files
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+COPY --from=builder /app/turbo.json ./turbo.json
 
-# Install Playwright browsers
+# Copy packages
+COPY --from=builder /app/packages ./packages
+
+# Copy built Next.js app
+COPY --from=builder /app/apps/screenapi/.next ./apps/screenapi/.next
+COPY --from=builder /app/apps/screenapi/public ./apps/screenapi/public
+COPY --from=builder /app/apps/screenapi/package.json ./apps/screenapi/package.json
+COPY --from=builder /app/apps/screenapi/next.config.ts ./apps/screenapi/next.config.ts
+
+# Copy node_modules
+COPY --from=builder /app/node_modules ./node_modules
+
+# Install Playwright Chromium
 RUN npx playwright-core install chromium --with-deps
 
 # Set environment
@@ -80,4 +82,5 @@ ENV PORT=43210
 EXPOSE 43210
 
 # Start the application
-CMD ["node", "apps/screenapi/server.js"]
+WORKDIR /app/apps/screenapi
+CMD ["npx", "next", "start", "-p", "43210"]

@@ -29,5 +29,5 @@ databases:
     databaseName: screenapi
     user: screenapi
     region: frankfurt
-    plan: starter # 1GB storage, 0.5GB RAM
+    plan: free # Free tier (512MB) - or use 'standard' for production
     ipAllowList: [] # Allow all (or restrict to your IPs)

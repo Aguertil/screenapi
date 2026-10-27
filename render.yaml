@@ -24,7 +24,8 @@ services:
           property: connectionString
       # Redis is optional - comment out if not needed
       - key: REDIS_URL
-        fromDatabase:
+        fromService:
+          type: redis
           name: screenapi-redis
           property: connectionString
 

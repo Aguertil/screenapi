@@ -31,8 +31,8 @@ RUN pnpm install
 
 RUN pnpm --filter @repo/database db:generate
 
-# Install Playwright Chromium with --yes flag to auto-download playwright package
-RUN npx --yes playwright install chromium --with-deps
+# Install Playwright package temporarily and download Chromium browser
+RUN npm install -g playwright && playwright install chromium --with-deps
 
 EXPOSE 43210
 

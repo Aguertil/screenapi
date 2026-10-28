@@ -58,8 +58,9 @@ export default function PlaygroundPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setApiKey(data.apiKey);
-        alert(`API Key created: ${data.apiKey}`);
+        const key = data.apiKey.key;
+        setApiKey(key);
+        alert(`API Key created: ${key}`);
       } else {
         const error = await response.json();
         alert(error.message || 'Failed to create API key');

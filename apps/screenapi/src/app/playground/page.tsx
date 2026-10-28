@@ -1,35 +1,97 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
+interface DevicePreset {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  category: string;
+}
+
 export default function PlaygroundPage() {
+  const [activeTab, setActiveTab] = useState<'screenshot' | 'scrape'>('screenshot');
+  
+  // Screenshot state
   const [url, setUrl] = useState('https://example.com');
   const [apiKey, setApiKey] = useState('');
   const [format, setFormat] = useState('PNG');
-  const [viewport, setViewport] = useState('DESKTOP');
+  const [devicePreset, setDevicePreset] = useState('');
   const [fullPage, setFullPage] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{ success: boolean; message: string; imageUrl?: string } | null>(null);
+  const [result, setResult] = useState<{ success: boolean; message: string; imageUrl?: string; data?: any } | null>(null);
+  const [devices, setDevices] = useState<DevicePreset[]>([]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Scraping state
+  const [scrapeUrl, setScrapeUrl] = useState('https://example.com');
+  const [extractMetadata, setExtractMetadata] = useState(true);
+  const [extractText, setExtractText] = useState(true);
+  const [extractLinks, setExtractLinks] = useState(false);
+  const [extractImages, setExtractImages] = useState(false);
+  const [scrapeLoading, setScrapeLoading] = useState(false);
+  const [scrapeResult, setScrapeResult] = useState<any>(null);
+
+  // Load device presets
+  useEffect(() => {
+    fetch('/api/v1/devices')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setDevices(data.devices);
+        }
+      })
+      .catch(err => console.error('Failed to load devices:', err));
+  }, []);
+
+  const handleCreateApiKey = async () => {
+    try {
+      const response = await fetch('/api/admin/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'demo@screenapi.local',
+          fullName: 'Demo User',
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setApiKey(data.apiKey);
+        alert(`API Key created: ${data.apiKey}`);
+      } else {
+        const error = await response.json();
+        alert(error.message || 'Failed to create API key');
+      }
+    } catch (error) {
+      alert('Error creating API key');
+    }
+  };
+
+  const handleScreenshotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setResult(null);
 
     try {
+      const body: any = {
+        url,
+        format,
+        fullPage,
+      };
+
+      if (devicePreset) {
+        body.devicePreset = devicePreset;
+      }
+
       const response = await fetch('/api/v1/screenshot', {
         method: 'POST',
         headers: {
           'x-api-key': apiKey,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          url,
-          format,
-          viewportType: viewport,
-          fullPage,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (response.ok) {
@@ -50,232 +112,408 @@ export default function PlaygroundPage() {
     } catch (error) {
       setResult({
         success: false,
-        message: 'Network error: ' + (error as Error).message,
+        message: 'Network error occurred',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateApiKey = async () => {
+  const handleScrapeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setScrapeLoading(true);
+    setScrapeResult(null);
+
     try {
-      const response = await fetch('/api/admin/setup', { method: 'POST' });
+      const response = await fetch('/api/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: scrapeUrl,
+          extractMetadata,
+          extractText,
+          extractLinks,
+          extractImages,
+        }),
+      });
+
       const data = await response.json();
-      setApiKey(data.apiKey.key);
-      alert('API Key created! It has been filled in the form.');
+      
+      if (response.ok && data.success) {
+        setScrapeResult({ success: true, data: data.data });
+      } else {
+        setScrapeResult({
+          success: false,
+          message: data.message || 'Failed to scrape webpage',
+        });
+      }
     } catch (error) {
-      alert('Failed to create API key');
+      setScrapeResult({
+        success: false,
+        message: 'Network error occurred',
+      });
+    } finally {
+      setScrapeLoading(false);
     }
   };
 
+  const downloadScreenshot = () => {
+    if (result?.imageUrl) {
+      const a = document.createElement('a');
+      a.href = result.imageUrl;
+      a.download = `screenshot-${Date.now()}.${format.toLowerCase()}`;
+      a.click();
+    }
+  };
+
+  const phoneDevices = devices.filter(d => d.category === 'phone');
+  const tabletDevices = devices.filter(d => d.category === 'tablet');
+  const desktopDevices = devices.filter(d => d.category === 'desktop');
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Navigation */}
-      <nav className="border-b border-white/10 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <Link href="/" className="text-2xl font-bold text-white">
-                ScreenAPI
-              </Link>
-            </div>
-            <div className="flex items-center space-x-6">
-              <Link href="/playground" className="text-white font-semibold">
-                Playground
-              </Link>
-              <Link href="/docs" className="text-gray-300 hover:text-white transition">
-                Docs
-              </Link>
-              <Link href="/dashboard" className="text-gray-300 hover:text-white transition">
-                Dashboard
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">API Playground</h1>
-          <p className="text-gray-300">Test the screenshot API directly from your browser</p>
+          <Link 
+            href="/"
+            className="inline-flex items-center text-purple-400 hover:text-purple-300 mb-4 transition-colors"
+          >
+            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Home
+          </Link>
+          
+          <h1 className="text-4xl font-bold text-white mb-2">
+            🎮 API Playground
+          </h1>
+          <p className="text-purple-200">
+            Test screenshots and web scraping in real-time
+          </p>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Form */}
-          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-8">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* API Key */}
-              <div>
-                <label className="block text-white font-semibold mb-2">
-                  API Key
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk_test_xxxxxxxxxxxxxxxx"
-                    className="flex-1 bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCreateApiKey}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg transition font-semibold whitespace-nowrap"
-                  >
-                    Create Key
-                  </button>
-                </div>
-                <p className="text-gray-400 text-sm mt-1">
-                  Don't have a key? Click "Create Key"
-                </p>
-              </div>
-
-              {/* URL */}
-              <div>
-                <label className="block text-white font-semibold mb-2">
-                  URL to Capture
-                </label>
-                <input
-                  type="url"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://example.com"
-                  className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                />
-              </div>
-
-              {/* Format */}
-              <div>
-                <label className="block text-white font-semibold mb-2">
-                  Format
-                </label>
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                  className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="PNG">PNG</option>
-                  <option value="JPEG">JPEG</option>
-                  <option value="WEBP">WEBP</option>
-                </select>
-              </div>
-
-              {/* Viewport */}
-              <div>
-                <label className="block text-white font-semibold mb-2">
-                  Viewport
-                </label>
-                <select
-                  value={viewport}
-                  onChange={(e) => setViewport(e.target.value)}
-                  className="w-full bg-black/30 border border-white/20 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="DESKTOP">Desktop (1920x1080)</option>
-                  <option value="MOBILE">Mobile (375x667)</option>
-                  <option value="TABLET">Tablet (768x1024)</option>
-                </select>
-              </div>
-
-              {/* Full Page */}
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="fullPage"
-                  checked={fullPage}
-                  onChange={(e) => setFullPage(e.target.checked)}
-                  className="w-5 h-5 rounded border-white/20 bg-black/30 text-purple-600 focus:ring-2 focus:ring-purple-500"
-                />
-                <label htmlFor="fullPage" className="ml-3 text-white font-semibold">
-                  Capture Full Page
-                </label>
-              </div>
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-700 text-white px-6 py-4 rounded-lg font-semibold transition text-lg"
-              >
-                {loading ? 'Capturing...' : 'Capture Screenshot 📸'}
-              </button>
-            </form>
-
-            {/* Result Message */}
-            {result && (
-              <div
-                className={`mt-6 p-4 rounded-lg ${
-                  result.success
-                    ? 'bg-green-500/20 border border-green-500/30'
-                    : 'bg-red-500/20 border border-red-500/30'
-                }`}
-              >
-                <p className={result.success ? 'text-green-400' : 'text-red-400'}>
-                  {result.message}
-                </p>
-              </div>
-            )}
+        {/* API Key Section */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-8 border border-white/20">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-purple-200 mb-2">
+                API Key
+              </label>
+              <input
+                type="text"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter your API key or create one"
+                className="w-full px-4 py-3 bg-slate-800/50 border border-purple-500/30 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <button
+              onClick={handleCreateApiKey}
+              className="ml-4 mt-7 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 transition-all"
+            >
+              Create API Key
+            </button>
           </div>
+        </div>
 
-          {/* Preview */}
-          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-8">
-            <h2 className="text-2xl font-bold text-white mb-4">Preview</h2>
-            
-            {loading && (
-              <div className="flex items-center justify-center h-96">
-                <div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-500 border-t-transparent"></div>
-              </div>
-            )}
+        {/* Tabs */}
+        <div className="flex space-x-4 mb-8">
+          <button
+            onClick={() => setActiveTab('screenshot')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+              activeTab === 'screenshot'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                : 'bg-white/10 text-purple-200 hover:bg-white/20'
+            }`}
+          >
+            📸 Screenshots
+          </button>
+          <button
+            onClick={() => setActiveTab('scrape')}
+            className={`px-6 py-3 rounded-xl font-semibold transition-all ${
+              activeTab === 'scrape'
+                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                : 'bg-white/10 text-purple-200 hover:bg-white/20'
+            }`}
+          >
+            🕷️ Web Scraping
+          </button>
+        </div>
 
-            {result?.imageUrl && !loading && (
-              <div className="space-y-4">
-                <img
-                  src={result.imageUrl}
-                  alt="Screenshot"
-                  className="w-full rounded-lg border border-white/20"
-                />
-                <a
-                  href={result.imageUrl}
-                  download={`screenshot.${format.toLowerCase()}`}
-                  className="block w-full bg-white/20 hover:bg-white/30 text-white px-6 py-3 rounded-lg font-semibold text-center transition"
+        {/* Screenshot Tab */}
+        {activeTab === 'screenshot' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Form */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6">Screenshot Configuration</h2>
+              
+              <form onSubmit={handleScreenshotSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                    Target URL
+                  </label>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-slate-800/50 border border-purple-500/30 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="https://example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                    Device Preset
+                  </label>
+                  <select
+                    value={devicePreset}
+                    onChange={(e) => setDevicePreset(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-800/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Desktop (Default)</option>
+                    {phoneDevices.length > 0 && (
+                      <optgroup label="📱 Phones">
+                        {phoneDevices.map((device) => (
+                          <option key={device.id} value={device.id}>
+                            {device.name} ({device.width}×{device.height})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {tabletDevices.length > 0 && (
+                      <optgroup label="📱 Tablets">
+                        {tabletDevices.map((device) => (
+                          <option key={device.id} value={device.id}>
+                            {device.name} ({device.width}×{device.height})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {desktopDevices.length > 0 && (
+                      <optgroup label="💻 Desktop">
+                        {desktopDevices.map((device) => (
+                          <option key={device.id} value={device.id}>
+                            {device.name} ({device.width}×{device.height})
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                    Image Format
+                  </label>
+                  <select
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-800/50 border border-purple-500/30 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="PNG">PNG</option>
+                    <option value="JPEG">JPEG</option>
+                    <option value="WEBP">WEBP</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="fullPage"
+                    checked={fullPage}
+                    onChange={(e) => setFullPage(e.target.checked)}
+                    className="w-5 h-5 rounded border-purple-500/30 bg-slate-800/50 text-purple-600 focus:ring-purple-500"
+                  />
+                  <label htmlFor="fullPage" className="ml-3 text-purple-200">
+                    Capture full page (scroll entire page)
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !apiKey}
+                  className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  Download Screenshot
-                </a>
-              </div>
-            )}
+                  {loading ? 'Capturing...' : '📸 Capture Screenshot'}
+                </button>
+              </form>
+            </div>
 
-            {!loading && !result?.imageUrl && (
-              <div className="flex items-center justify-center h-96 text-gray-400">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">📸</div>
+            {/* Result */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6">Result</h2>
+              
+              {!result && (
+                <div className="text-center text-purple-300 py-12">
+                  <svg className="w-24 h-24 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
                   <p>Your screenshot will appear here</p>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+              )}
 
-        {/* Examples */}
-        <div className="mt-12 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-8">
-          <h2 className="text-2xl font-bold text-white mb-6">Try These URLs</h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            {[
-              'https://example.com',
-              'https://github.com',
-              'https://stackoverflow.com',
-            ].map((exampleUrl) => (
-              <button
-                key={exampleUrl}
-                onClick={() => setUrl(exampleUrl)}
-                className="bg-white/10 hover:bg-white/20 border border-white/20 rounded-lg p-4 text-left transition"
-              >
-                <p className="text-white font-semibold mb-1">Example</p>
-                <p className="text-gray-400 text-sm break-all">{exampleUrl}</p>
-              </button>
-            ))}
+              {result?.success && result.imageUrl && (
+                <div>
+                  <div className="mb-4 p-4 bg-green-500/20 border border-green-500/30 rounded-xl">
+                    <p className="text-green-300">✅ {result.message}</p>
+                  </div>
+                  
+                  <div className="mb-4 bg-slate-800/50 rounded-xl p-2">
+                    <img 
+                      src={result.imageUrl} 
+                      alt="Screenshot" 
+                      className="w-full h-auto rounded-lg"
+                    />
+                  </div>
+
+                  <button
+                    onClick={downloadScreenshot}
+                    className="w-full px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:from-green-700 hover:to-emerald-700 transition-all"
+                  >
+                    💾 Download Screenshot
+                  </button>
+                </div>
+              )}
+
+              {result && !result.success && (
+                <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl">
+                  <p className="text-red-300">❌ {result.message}</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Scrape Tab */}
+        {activeTab === 'scrape' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Form */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6">Web Scraping Configuration</h2>
+              
+              <form onSubmit={handleScrapeSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                    Target URL
+                  </label>
+                  <input
+                    type="url"
+                    value={scrapeUrl}
+                    onChange={(e) => setScrapeUrl(e.target.value)}
+                    required
+                    className="w-full px-4 py-3 bg-slate-800/50 border border-purple-500/30 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="https://example.com"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-purple-200 mb-2">
+                    Extract Data
+                  </label>
+                  
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="extractMetadata"
+                      checked={extractMetadata}
+                      onChange={(e) => setExtractMetadata(e.target.checked)}
+                      className="w-5 h-5 rounded border-purple-500/30 bg-slate-800/50 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="extractMetadata" className="ml-3 text-purple-200">
+                      Meta tags (title, description, Open Graph, Twitter Cards)
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="extractText"
+                      checked={extractText}
+                      onChange={(e) => setExtractText(e.target.checked)}
+                      className="w-5 h-5 rounded border-purple-500/30 bg-slate-800/50 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="extractText" className="ml-3 text-purple-200">
+                      Text content
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="extractLinks"
+                      checked={extractLinks}
+                      onChange={(e) => setExtractLinks(e.target.checked)}
+                      className="w-5 h-5 rounded border-purple-500/30 bg-slate-800/50 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="extractLinks" className="ml-3 text-purple-200">
+                      All links
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="extractImages"
+                      checked={extractImages}
+                      onChange={(e) => setExtractImages(e.target.checked)}
+                      className="w-5 h-5 rounded border-purple-500/30 bg-slate-800/50 text-purple-600 focus:ring-purple-500"
+                    />
+                    <label htmlFor="extractImages" className="ml-3 text-purple-200">
+                      All images
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={scrapeLoading || !apiKey}
+                  className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {scrapeLoading ? 'Scraping...' : '🕷️ Scrape Webpage'}
+                </button>
+              </form>
+            </div>
+
+            {/* Result */}
+            <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8 border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-6">Scraped Data</h2>
+              
+              {!scrapeResult && (
+                <div className="text-center text-purple-300 py-12">
+                  <svg className="w-24 h-24 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p>Scraped data will appear here</p>
+                </div>
+              )}
+
+              {scrapeResult?.success && (
+                <div className="space-y-4">
+                  <div className="p-4 bg-green-500/20 border border-green-500/30 rounded-xl">
+                    <p className="text-green-300">✅ Data extracted successfully!</p>
+                  </div>
+                  
+                  <div className="bg-slate-800/50 rounded-xl p-4 max-h-[600px] overflow-auto">
+                    <pre className="text-sm text-purple-200 whitespace-pre-wrap">
+                      {JSON.stringify(scrapeResult.data, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {scrapeResult && !scrapeResult.success && (
+                <div className="p-4 bg-red-500/20 border border-red-500/30 rounded-xl">
+                  <p className="text-red-300">❌ {scrapeResult.message}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

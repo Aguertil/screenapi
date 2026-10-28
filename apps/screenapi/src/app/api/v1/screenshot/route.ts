@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createCaptureScreenshotUseCase } from '@/core/screenshot/infrastructure';
+import { getDevicePreset } from '@/core/screenshot/domain/device-presets';
 
 // Request validation schema
 const screenshotRequestSchema = z.object({
@@ -8,6 +9,7 @@ const screenshotRequestSchema = z.object({
   format: z.enum(['PNG', 'JPEG', 'WEBP']).optional().default('PNG'),
   quality: z.number().min(1).max(100).optional(),
   viewportType: z.enum(['DESKTOP', 'MOBILE', 'TABLET', 'CUSTOM']).optional().default('DESKTOP'),
+  devicePreset: z.string().optional(),
   viewportWidth: z.number().min(200).max(3840).optional(),
   viewportHeight: z.number().min(200).max(2160).optional(),
   fullPage: z.boolean().optional().default(false),
@@ -65,11 +67,25 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    // 3. Get client info
+    // 3. Apply device preset if specified
+    let finalWidth = body.viewportWidth;
+    let finalHeight = body.viewportHeight;
+    let finalUserAgent = body.userAgent;
+
+    if (body.devicePreset) {
+      const preset = getDevicePreset(body.devicePreset);
+      if (preset) {
+        finalWidth = preset.width;
+        finalHeight = preset.height;
+        finalUserAgent = preset.userAgent;
+      }
+    }
+
+    // 4. Get client info
     const ipAddress = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || undefined;
     const userAgentHeader = request.headers.get('user-agent') || undefined;
 
-    // 4. Execute use case
+    // 5. Execute use case
     const useCase = createCaptureScreenshotUseCase(process.env.REDIS_URL);
     
     const result = await useCase.execute({
@@ -78,15 +94,15 @@ export async function POST(request: NextRequest) {
       format: body.format,
       quality: body.quality,
       viewportType: body.viewportType,
-      viewportWidth: body.viewportWidth,
-      viewportHeight: body.viewportHeight,
+      viewportWidth: finalWidth,
+      viewportHeight: finalHeight,
       fullPage: body.fullPage,
       waitForSelector: body.waitForSelector,
       waitForTimeout: body.waitForTimeout,
       hideElements: body.hideElements,
       blockCookies: body.blockCookies,
       blockAds: body.blockAds,
-      userAgent: body.userAgent,
+      userAgent: finalUserAgent,
       ipAddress,
       userAgentHeader,
     });

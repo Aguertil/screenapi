@@ -5,6 +5,7 @@ import GitHubProvider from 'next-auth/providers/github';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@repo/database';
 import { compare } from 'bcryptjs';
+import { sendWelcomeEmail } from './email';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -116,6 +117,11 @@ export const authOptions: NextAuthOptions = {
               rateLimit: 10,
             },
           });
+
+          // Send welcome email for new OAuth users
+          sendWelcomeEmail(user.email!, user.name || 'User').catch((err) =>
+            console.error('Failed to send welcome email:', err)
+          );
         }
       }
 

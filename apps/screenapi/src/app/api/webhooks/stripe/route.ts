@@ -3,6 +3,11 @@ import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { stripe, STRIPE_PLANS } from '@/lib/stripe';
 import { prisma } from '@repo/database';
+import { 
+  sendPaymentSuccessEmail, 
+  sendPaymentFailedEmail, 
+  sendSubscriptionCancelledEmail 
+} from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -150,6 +155,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       },
     });
   }
+
+  // Send payment success email
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (user) {
+    sendPaymentSuccessEmail(
+      user.email,
+      user.name || 'User',
+      plan,
+      session.amount_total || 0
+    ).catch((err) => console.error('Failed to send payment success email:', err));
+  }
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
@@ -198,6 +214,15 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
         rateLimit: 10,
       },
     });
+
+    // Send cancellation email
+    const user = await prisma.user.findUnique({ where: { id: sub.userId } });
+    if (user) {
+      sendSubscriptionCancelledEmail(
+        user.email,
+        user.name || 'User'
+      ).catch((err) => console.error('Failed to send cancellation email:', err));
+    }
   }
 }
 
@@ -274,4 +299,14 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
       description: `Failed payment for ${subscription.plan} subscription`,
     },
   });
+
+  // Send payment failed email
+  const user = await prisma.user.findUnique({ where: { id: subscription.userId } });
+  if (user) {
+    sendPaymentFailedEmail(
+      user.email,
+      user.name || 'User',
+      'Your payment method was declined'
+    ).catch((err) => console.error('Failed to send payment failed email:', err));
+  }
 }

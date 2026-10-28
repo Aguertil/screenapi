@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { z } from 'zod';
 import { prisma } from '@repo/database';
+import { sendWelcomeEmail } from '@/lib/email';
 
 const signupSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -63,6 +64,11 @@ export async function POST(request: NextRequest) {
         rateLimit: 10,
       },
     });
+
+    // Send welcome email
+    sendWelcomeEmail(user.email, user.name || 'User').catch((err) =>
+      console.error('Failed to send welcome email:', err)
+    );
 
     return NextResponse.json({
       success: true,

@@ -17,11 +17,14 @@ export default function HomePage() {
               <Link href="/docs" className="text-gray-300 hover:text-white transition">
                 Documentation
               </Link>
-              <Link href="/dashboard" className="text-gray-300 hover:text-white transition">
-                Dashboard
+              <Link href="/pricing" className="text-gray-300 hover:text-white transition">
+                Pricing
               </Link>
-              <Link href="/api/admin/setup" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
-                Get Started
+              <Link href="/auth/signin" className="text-gray-300 hover:text-white transition">
+                Sign In
+              </Link>
+              <Link href="/auth/signup" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
+                Sign Up Free
               </Link>
             </div>
           </div>
@@ -43,7 +46,7 @@ export default function HomePage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link 
-              href="/api/admin/setup"
+              href="/auth/signup"
               className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition transform hover:scale-105"
             >
               Start Free Trial

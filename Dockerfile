@@ -51,8 +51,11 @@ COPY apps/screenapi ./apps/screenapi
 # Prisma generate
 RUN cd packages/database && pnpm exec prisma generate
 
-# Install Playwright
-RUN npx playwright@1.64.1 install chromium --with-deps
+# Install Playwright globally first
+RUN npm install -g playwright@1.64.1
+
+# Install Playwright browsers
+RUN playwright install chromium --with-deps
 
 # Build
 RUN cd apps/screenapi && pnpm run build

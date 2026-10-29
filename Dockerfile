@@ -45,8 +45,15 @@ COPY apps/screenapi/package.json ./apps/screenapi/
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copie du code
-COPY packages ./packages
+# Copie du code source des packages
+COPY packages/database ./packages/database
+COPY packages/shared-types ./packages/shared-types
+COPY packages/shared-config ./packages/shared-config
+COPY packages/shared-ui ./packages/shared-ui
+COPY packages/testing ./packages/testing
+COPY packages/typescript-config ./packages/typescript-config
+
+# Copie du code de l'app
 COPY apps/screenapi ./apps/screenapi
 
 # Prisma generate

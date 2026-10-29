@@ -1,20 +1,9 @@
 {
-  "buildCommand": "pnpm --filter screenapi build",
-  "installCommand": "npm i -g pnpm@9 && pnpm install",
-  "framework": "nextjs",
+  "buildCommand": "cd apps/screenapi && pnpm build",
+  "installCommand": "corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install",
+  "framework": null,
   "outputDirectory": "apps/screenapi/.next",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/apps/screenapi/$1"
-    }
-  ],
   "env": {
     "PNPM_VERSION": "9.0.0"
-  },
-  "build": {
-    "env": {
-      "PNPM_VERSION": "9.0.0"
-    }
   }
 }

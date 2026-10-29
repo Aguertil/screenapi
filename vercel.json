@@ -1,9 +1,5 @@
 {
-  "buildCommand": "cd apps/screenapi && pnpm build",
-  "installCommand": "corepack enable && corepack prepare pnpm@9.0.0 --activate && pnpm install",
-  "framework": null,
-  "outputDirectory": "apps/screenapi/.next",
-  "env": {
-    "PNPM_VERSION": "9.0.0"
-  }
+  "buildCommand": "cd apps/screenapi && npx prisma generate && pnpm build",
+  "installCommand": "npm install -g pnpm@9.0.0 && pnpm install --no-frozen-lockfile",
+  "outputDirectory": "apps/screenapi/.next"
 }

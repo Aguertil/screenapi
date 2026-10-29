@@ -17,6 +17,7 @@
   "dependencies": {
     "next": "^15.1.6",
     "next-auth": "^4.24.5",
+    "@next-auth/prisma-adapter": "^1.0.7",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "playwright-core": "^1.64.1",

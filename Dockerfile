@@ -39,6 +39,7 @@ COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-config/package.json ./packages/shared-config/
 COPY packages/shared-ui/package.json ./packages/shared-ui/
 COPY packages/testing/package.json ./packages/testing/
+COPY packages/typescript-config/package.json ./packages/typescript-config/
 COPY apps/screenapi/package.json ./apps/screenapi/
 
 # Install dependencies

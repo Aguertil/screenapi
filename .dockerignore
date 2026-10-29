@@ -1,52 +1,29 @@
-# Dependencies
 node_modules
-.pnpm-store
-
-# Testing
-coverage
-.nyc_output
-*.tsbuildinfo
-
-# Next.js
-.next/
-out/
-build
-
-# Misc
-.DS_Store
-*.pem
+.next
+.turbo
+.git
+.gitignore
+.env*.local
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Local env files
-.env
-.env*.local
-.env.development
-.env.test
-
-# Git
-.git
-.gitignore
-
-# IDE
-.vscode
-.idea
+.DS_Store
 *.swp
 *.swo
-
-# Documentation
+.vscode
+.idea
+coverage
+.vercel
+dist
+build
+tmp
+temp
 *.md
 !README.md
-
-# Test files
-**/*.test.ts
-**/*.spec.ts
-tests/
-playwright-report/
-test-results/
-
-# Misc
-screenshot.png
-screenshots/
+.github
+.husky
+apps/screenapi/prisma/*.db
+apps/screenapi/prisma/*.db-journal
+packages/database/prisma/*.db
+packages/database/prisma/*.db-journal

@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 43210",
-    "build": "prisma generate && next build",
-    "start": "next start -p 43210",
+    "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma && next build",
+    "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest",

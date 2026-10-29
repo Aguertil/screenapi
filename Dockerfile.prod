@@ -1,0 +1,107 @@
+FROM node:20-slim AS base
+
+# Install dependencies needed for Prisma and Playwright
+RUN apt-get update -y && \
+    apt-get install -y openssl wget gnupg ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install pnpm
+RUN npm install -g pnpm@9.0.0
+
+WORKDIR /app
+
+# Copy workspace config
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+
+# Dependencies stage
+FROM base AS deps
+COPY packages/database/package.json ./packages/database/
+COPY apps/screenapi/package.json ./apps/screenapi/
+RUN pnpm install --frozen-lockfile
+
+# Builder stage
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
+COPY --from=deps /app/apps/screenapi/node_modules ./apps/screenapi/node_modules
+
+# Copy source code
+COPY packages/database ./packages/database
+COPY apps/screenapi ./apps/screenapi
+COPY turbo.json ./
+
+# Generate Prisma client
+RUN cd packages/database && pnpm exec prisma generate
+
+# Install Playwright browsers
+RUN pnpm add -g playwright && playwright install chromium --with-deps
+
+# Build the app
+WORKDIR /app/apps/screenapi
+RUN pnpm run build
+
+# Production stage
+FROM node:20-slim AS production
+
+# Install production dependencies for Playwright
+RUN apt-get update -y && \
+    apt-get install -y \
+    openssl \
+    ca-certificates \
+    fonts-liberation \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libwayland-client0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm and Playwright
+RUN npm install -g pnpm@9.0.0 playwright && \
+    playwright install chromium --with-deps
+
+WORKDIR /app
+
+# Copy workspace structure
+COPY pnpm-workspace.yaml package.json ./
+COPY --from=builder /app/packages/database/package.json ./packages/database/
+COPY --from=builder /app/apps/screenapi/package.json ./apps/screenapi/
+
+# Install production dependencies only
+RUN pnpm install --prod --frozen-lockfile
+
+# Copy built application
+COPY --from=builder /app/packages/database ./packages/database
+COPY --from=builder /app/apps/screenapi/.next ./apps/screenapi/.next
+COPY --from=builder /app/apps/screenapi/public ./apps/screenapi/public
+
+# Copy Prisma schema for migrations
+COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
+
+WORKDIR /app/apps/screenapi
+
+# Create non-root user
+RUN groupadd -r nodejs && useradd -r -g nodejs nodejs && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+EXPOSE 8080
+
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV HOSTNAME="0.0.0.0"
+
+CMD ["pnpm", "start", "-p", "8080"]

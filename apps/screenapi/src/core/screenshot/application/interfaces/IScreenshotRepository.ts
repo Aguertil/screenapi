@@ -1,5 +1,5 @@
 import { Screenshot, ScreenshotId } from '../../domain/Screenshot';
-import type { PaginationParams, PaginatedResponse } from '@repo/shared-types';
+import type { PaginationParams, PaginatedResponse } from '@/lib/types';
 
 export interface IScreenshotRepository {
   /**

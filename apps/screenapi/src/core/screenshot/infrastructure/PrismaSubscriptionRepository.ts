@@ -1,5 +1,5 @@
-import { prisma } from '@repo/database';
-import { SubscriptionPlan, SubscriptionStatus } from '@repo/shared-types';
+import { prisma } from '@/lib/prisma';
+import { SubscriptionPlan, SubscriptionStatus } from '@/lib/types';
 import type {
   ISubscriptionRepository,
   SubscriptionData,

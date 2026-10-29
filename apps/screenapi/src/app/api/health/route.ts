@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@repo/database';
+import { prisma } from '@/lib/prisma';
 import { PlaywrightScreenshotService } from '@/core/screenshot/infrastructure/PlaywrightScreenshotService';
 
 /**

@@ -1,4 +1,4 @@
-import { Result, success, failure, ValidationError } from '@repo/shared-types';
+import { Result, success, failure, ValidationError } from '@/lib/types';
 
 export class UrlValidator {
   /**

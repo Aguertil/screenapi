@@ -1,5 +1,5 @@
-import { prisma } from '@repo/database';
-import type { PaginationParams, PaginatedResponse } from '@repo/shared-types';
+import { prisma } from '@/lib/prisma';
+import type { PaginationParams, PaginatedResponse } from '@/lib/types';
 import type { IScreenshotRepository } from '../application/interfaces/IScreenshotRepository';
 import { Screenshot, ScreenshotId, ImageFormat, ViewportType } from '../domain/Screenshot';
 

@@ -6,7 +6,7 @@ import type { ISubscriptionRepository, SubscriptionData } from './interfaces/ISu
 import type { IScreenshotRepository } from './interfaces/IScreenshotRepository';
 import type { IRateLimiter, RateLimitResult } from './interfaces/IRateLimiter';
 import type { IUsageLogger } from './interfaces/IUsageLogger';
-import { success, failure, SubscriptionPlan, SubscriptionStatus } from '@repo/shared-types';
+import { success, failure, SubscriptionPlan, SubscriptionStatus } from '@/lib/types';
 
 // Mock implementations
 class MockScreenshotService implements IScreenshotService {

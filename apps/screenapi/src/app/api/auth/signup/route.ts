@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hash } from 'bcryptjs';
 import { z } from 'zod';
-import { prisma } from '@repo/database';
+import { prisma } from '@/lib/prisma';
 import { sendWelcomeEmail } from '@/lib/email';
 
 const signupSchema = z.object({

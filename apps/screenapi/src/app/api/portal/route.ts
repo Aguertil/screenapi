@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { stripe } from '@/lib/stripe';
-import { prisma } from '@repo/database';
+import { prisma } from '@/lib/prisma';
 
 export async function POST() {
   try {

@@ -1,4 +1,4 @@
-import { Result } from '@repo/shared-types';
+import { Result } from '@/lib/types';
 import { ScreenshotOptions } from '../../domain/ScreenshotOptions';
 import type { ImageFormat } from '../../domain/Screenshot';
 

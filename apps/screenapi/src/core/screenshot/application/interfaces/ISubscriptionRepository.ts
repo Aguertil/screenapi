@@ -1,4 +1,4 @@
-import { SubscriptionPlan, SubscriptionStatus } from '@repo/shared-types';
+import { SubscriptionPlan, SubscriptionStatus } from '@/lib/types';
 
 export interface SubscriptionData {
   id: string;

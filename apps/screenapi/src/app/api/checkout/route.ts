@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { stripe, STRIPE_PLANS } from '@/lib/stripe';
-import { prisma } from '@repo/database';
+import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 
 const checkoutSchema = z.object({

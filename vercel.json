@@ -1,5 +1,0 @@
-{
-  "buildCommand": "cd apps/screenapi && npx prisma generate && pnpm build",
-  "installCommand": "npm install -g pnpm@9.0.0 && pnpm install --no-frozen-lockfile",
-  "outputDirectory": "apps/screenapi/.next"
-}

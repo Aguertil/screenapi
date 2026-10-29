@@ -2,10 +2,9 @@
   "name": "screenapi",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "pnpm@9.0.0",
   "scripts": {
     "dev": "next dev -p 43210",
-    "build": "prisma generate --schema=../../packages/database/prisma/schema.prisma && next build",
+    "build": "prisma generate && next build",
     "start": "next start -p 43210",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -16,8 +15,6 @@
     "clean": "rm -rf .next .turbo node_modules"
   },
   "dependencies": {
-    "@repo/database": "workspace:*",
-    "@repo/shared-types": "workspace:*",
     "next": "^15.1.6",
     "next-auth": "^4.24.5",
     "react": "^19.0.0",
@@ -34,7 +31,6 @@
     "postcss": "^8.4.32"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.11.0",
     "@types/react": "^19.0.0",

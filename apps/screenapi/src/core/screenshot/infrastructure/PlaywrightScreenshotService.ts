@@ -1,5 +1,5 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright-core';
-import { Result, success, failure } from '@repo/shared-types';
+import { Result, success, failure } from '@/lib/types';
 import {
   IScreenshotService,
   ScreenshotResult,

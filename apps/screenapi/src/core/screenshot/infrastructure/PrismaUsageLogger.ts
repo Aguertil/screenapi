@@ -1,4 +1,4 @@
-import { prisma } from '@repo/database';
+import { prisma } from '@/lib/prisma';
 import type {
   IUsageLogger,
   SuccessLogData,

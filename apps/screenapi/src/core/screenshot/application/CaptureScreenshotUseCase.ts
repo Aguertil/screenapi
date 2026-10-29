@@ -1,4 +1,4 @@
-import { Result, success, failure, DomainError } from '@repo/shared-types';
+import { Result, success, failure, DomainError } from '@/lib/types';
 import { ScreenshotOptions } from '../domain/ScreenshotOptions';
 import { Screenshot, ScreenshotId } from '../domain/Screenshot';
 import { UrlValidator } from '../domain/UrlValidator';

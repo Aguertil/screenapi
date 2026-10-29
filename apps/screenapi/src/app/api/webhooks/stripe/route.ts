@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
 import { stripe, STRIPE_PLANS } from '@/lib/stripe';
-import { prisma } from '@repo/database';
+import { prisma } from '@/lib/prisma';
 import { 
   sendPaymentSuccessEmail, 
   sendPaymentFailedEmail, 

@@ -1,7 +1,6 @@
-# Dockerfile simple pour Railway
-FROM node:20-bookworm-slim
+FROM node:20-slim
 
-# Installation des dépendances système pour Playwright
+# Installation des dépendances système
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
@@ -22,7 +21,6 @@ RUN apt-get update && apt-get install -y \
     libxfixes3 \
     libxkbcommon0 \
     libxrandr2 \
-    xdg-utils \
     wget \
     openssl \
     && rm -rf /var/lib/apt/lists/*
@@ -32,10 +30,10 @@ WORKDIR /app
 # Installation de pnpm
 RUN npm install -g pnpm@9.0.0
 
-# Copie des fichiers de configuration
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+# Copie des fichiers de config workspace
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml turbo.json ./
 
-# Copie des package.json de tous les packages
+# Copie des package.json
 COPY packages/database/package.json ./packages/database/
 COPY packages/shared-types/package.json ./packages/shared-types/
 COPY packages/shared-config/package.json ./packages/shared-config/
@@ -43,23 +41,28 @@ COPY packages/shared-ui/package.json ./packages/shared-ui/
 COPY packages/testing/package.json ./packages/testing/
 COPY apps/screenapi/package.json ./apps/screenapi/
 
-# Installation des dépendances
+# Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copie du code source
-COPY . .
+# Copie du code
+COPY packages ./packages
+COPY apps/screenapi ./apps/screenapi
 
-# Génération du client Prisma
+# Prisma generate
 RUN cd packages/database && pnpm exec prisma generate
 
-# Installation de Playwright
-RUN pnpm exec playwright install chromium --with-deps
+# Install Playwright
+RUN npx playwright@1.64.1 install chromium --with-deps
 
-# Build de l'application
+# Build
 RUN cd apps/screenapi && pnpm run build
 
-# Exposition du port
+# Expose port
 EXPOSE 3000
 
-# Démarrage
-CMD ["sh", "-c", "cd apps/screenapi && pnpm start"]
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Start
+WORKDIR /app/apps/screenapi
+CMD ["pnpm", "start"]

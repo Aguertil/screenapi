@@ -23,7 +23,5 @@ temp
 !README.md
 .github
 .husky
-apps/screenapi/prisma/*.db
-apps/screenapi/prisma/*.db-journal
-packages/database/prisma/*.db
-packages/database/prisma/*.db-journal
+*.db
+*.db-journal

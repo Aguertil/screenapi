@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { stripe, STRIPE_PLANS } from '@/lib/stripe';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import Stripe from 'stripe';
 
 const checkoutSchema = z.object({
   plan: z.enum(['PRO', 'ENTERPRISE']),

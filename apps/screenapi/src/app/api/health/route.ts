@@ -41,6 +41,16 @@ export async function GET() {
     checks.redis = { status: 'ok', message: 'Using in-memory fallback' };
   }
 
+  // En production, ne pas exposer les messages d'erreur internes (hôte, schéma…)
+  if (process.env.NODE_ENV === 'production') {
+    for (const [name, check] of Object.entries(checks)) {
+      if (check.status === 'error') {
+        console.error(`[health] ${name}:`, check.message);
+        check.message = 'unavailable';
+      }
+    }
+  }
+
   // Overall status
   const allOk = Object.values(checks).every((check) => check.status === 'ok');
   const status = allOk ? 'healthy' : 'degraded';

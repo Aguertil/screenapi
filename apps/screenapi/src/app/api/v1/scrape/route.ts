@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { chromium } from 'playwright-core';
+import { PrismaApiKeyRepository } from '@/core/screenshot/infrastructure';
+import { UrlValidator } from '@/core/screenshot/domain/UrlValidator';
+import { installNetworkGuard, isPublicUrl } from '@/core/screenshot/infrastructure/NetworkGuard';
 
 const scrapeRequestSchema = z.object({
   url: z.string().url('Invalid URL format'),
@@ -79,7 +82,25 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    // 3. Launch browser and scrape
+    // 3. Check the API key really exists and is active
+    const apiKeys = new PrismaApiKeyRepository();
+    if (!(await apiKeys.isValid(apiKey))) {
+      return NextResponse.json(
+        { error: 'Invalid API key', message: 'The API key is invalid or inactive', code: 'INVALID_API_KEY' },
+        { status: 401 }
+      );
+    }
+
+    // 4. SSRF protection (http/https only, no private network)
+    const urlCheck = UrlValidator.validate(body.url);
+    if (!urlCheck.success || !(await isPublicUrl(body.url))) {
+      return NextResponse.json(
+        { error: 'URL not allowed', message: 'Only public http(s) URLs are allowed', code: 'URL_NOT_ALLOWED' },
+        { status: 400 }
+      );
+    }
+
+    // 5. Launch browser and scrape
     const browser = await chromium.launch({
       headless: true,
       args: [
@@ -95,6 +116,7 @@ export async function POST(request: NextRequest) {
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       });
 
+      await installNetworkGuard(context);
       const page = await context.newPage();
       
       // Navigate to URL

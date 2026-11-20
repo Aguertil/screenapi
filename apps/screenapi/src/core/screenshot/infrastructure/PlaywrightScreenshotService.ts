@@ -6,6 +6,7 @@ import {
   CaptureError,
 } from '../application/interfaces/IScreenshotService';
 import { ScreenshotOptions } from '../domain/ScreenshotOptions';
+import { installNetworkGuard, isPublicUrl } from './NetworkGuard';
 
 /**
  * Browser pool for reusing browser instances
@@ -140,6 +141,15 @@ export class PlaywrightScreenshotService implements IScreenshotService {
             route.continue();
           }
         });
+      }
+
+      // Protection SSRF : enregistrée en dernier pour s'exécuter avant les autres
+      await installNetworkGuard(context);
+
+      if (!(await isPublicUrl(options.url))) {
+        return failure(
+          new CaptureError('URL pointing to a private network is not allowed', 'NAVIGATION_FAILED') as CaptureError,
+        );
       }
 
       // 5. Create page

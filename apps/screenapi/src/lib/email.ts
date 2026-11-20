@@ -156,7 +156,7 @@ export async function sendPaymentSuccessEmail(
           </tr>
           <tr>
             <td><strong>Amount:</strong></td>
-            <td>$${(amount / 100).toFixed(2)} USD</td>
+            <td>${(amount / 100).toFixed(2)} € HT / month</td>
           </tr>
           <tr>
             <td><strong>Status:</strong></td>

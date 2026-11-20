@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { SubscriptionPlan, SubscriptionStatus } from '@/lib/types';
+import { getPlan } from '@/lib/plans';
 import type {
   ISubscriptionRepository,
   SubscriptionData,
@@ -9,13 +10,27 @@ import type {
 export class PrismaSubscriptionRepository implements ISubscriptionRepository {
   async findByUserId(userId: string): Promise<SubscriptionData | null> {
     try {
-      const subscription = await prisma.subscription.findFirst({
-        where: { userId },
+      let subscription = await prisma.subscription.findFirst({
+        where: { userId, status: { in: ['ACTIVE', 'PAST_DUE'] } },
         orderBy: { createdAt: 'desc' },
       });
 
       if (!subscription) {
         return null;
+      }
+
+      // Quota mensuel : les abonnements payants sont remis à zéro par Stripe
+      // (facture payée) ; le plan gratuit l'est ici, un mois après le début.
+      if (!subscription.stripeSubscriptionId) {
+        const next = new Date(subscription.periodStart);
+        next.setMonth(next.getMonth() + 1);
+        if (next <= new Date()) {
+          const quota = getPlan(subscription.plan).screenshots;
+          subscription = await prisma.subscription.update({
+            where: { id: subscription.id },
+            data: { periodStart: new Date(), creditsTotal: quota, creditsUsed: 0, creditsRemaining: quota },
+          });
+        }
       }
 
       return {
@@ -35,34 +50,21 @@ export class PrismaSubscriptionRepository implements ISubscriptionRepository {
 
   async deductCredits(subscriptionId: string, amount: number): Promise<void> {
     try {
-      // Use transaction to ensure atomicity
-      await prisma.$transaction(async (tx) => {
-        const subscription = await tx.subscription.findUnique({
-          where: { id: subscriptionId },
-        });
-
-        if (!subscription) {
-          throw new Error('Subscription not found');
-        }
-
-        if (subscription.creditsRemaining < amount) {
-          const error: InsufficientCreditsError = {
-            name: 'InsufficientCreditsError',
-            message: `Insufficient credits: ${subscription.creditsRemaining} remaining, ${amount} required`,
-            creditsRemaining: subscription.creditsRemaining,
-            creditsRequired: amount,
-          };
-          throw error;
-        }
-
-        await tx.subscription.update({
-          where: { id: subscriptionId },
-          data: {
-            creditsUsed: { increment: amount },
-            creditsRemaining: { decrement: amount },
-          },
-        });
+      // Décrément atomique : ne passe que s'il reste assez de crédits
+      const updated = await prisma.subscription.updateMany({
+        where: { id: subscriptionId, creditsRemaining: { gte: amount } },
+        data: { creditsUsed: { increment: amount }, creditsRemaining: { decrement: amount } },
       });
+      if (updated.count === 0) {
+        const current = await prisma.subscription.findUnique({ where: { id: subscriptionId }, select: { creditsRemaining: true } });
+        const error: InsufficientCreditsError = {
+          name: 'InsufficientCreditsError',
+          message: `Insufficient credits: ${current?.creditsRemaining ?? 0} remaining, ${amount} required`,
+          creditsRemaining: current?.creditsRemaining ?? 0,
+          creditsRequired: amount,
+        };
+        throw error;
+      }
     } catch (error) {
       if (error && typeof error === 'object' && 'creditsRemaining' in error) {
         throw error; // Re-throw InsufficientCreditsError

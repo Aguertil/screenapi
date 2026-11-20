@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { randomBytes } from 'crypto';
+import { generateApiKey } from '@/lib/apiKeys';
+import { getPlan } from '@/lib/plans';
 import { z } from 'zod';
 
 const createKeySchema = z.object({
@@ -42,7 +43,7 @@ export async function GET() {
       keys: user.apiKeys.map((key) => ({
         id: key.id,
         name: key.name,
-        key: key.key,
+        key: `${key.prefix || 'sk_live_'}…`,
         isActive: key.isActive,
         rateLimit: key.rateLimit,
         lastUsedAt: key.lastUsedAt,
@@ -85,23 +86,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get current subscription to determine rate limit
+    // Limite de débit selon le plan
     const subscription = user.subscriptions.find((sub) => sub.status === 'ACTIVE');
-    let rateLimit = 10; // FREE default
+    const rateLimit = getPlan(subscription?.plan).ratePerMinute;
 
-    if (subscription?.plan === 'PRO') {
-      rateLimit = 100;
-    } else if (subscription?.plan === 'ENTERPRISE') {
-      rateLimit = 1000;
-    }
-
-    // Generate API key
-    const apiKey = `sk_live_${randomBytes(32).toString('hex')}`;
+    // Clé générée ici, stockée sous forme d'empreinte seulement
+    const generated = generateApiKey();
 
     const newKey = await prisma.apiKey.create({
       data: {
         userId: user.id,
-        key: apiKey,
+        key: generated.hash,
+        prefix: generated.prefix,
         name,
         isActive: true,
         rateLimit,
@@ -113,7 +109,7 @@ export async function POST(request: NextRequest) {
       key: {
         id: newKey.id,
         name: newKey.name,
-        key: newKey.key,
+        key: generated.key, // montrée une seule fois
         isActive: newKey.isActive,
         rateLimit: newKey.rateLimit,
         createdAt: newKey.createdAt,

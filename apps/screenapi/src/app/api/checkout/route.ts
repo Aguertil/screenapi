@@ -1,184 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { stripe, STRIPE_PLANS } from '@/lib/stripe';
-import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
-import Stripe from 'stripe';
+import { authOptions } from '@/lib/auth';
+import { stripe, stripeConfigured } from '@/lib/stripe';
+import { prisma } from '@/lib/prisma';
+import { PAID_PLANS, stripePriceId, type PlanId } from '@/lib/plans';
 
 const checkoutSchema = z.object({
-  plan: z.enum(['PRO', 'ENTERPRISE']),
-  promoCode: z.string().optional(),
+  plan: z.enum(PAID_PLANS as [PlanId, ...PlanId[]]),
 });
 
+const appUrl = () => process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:43210';
+
+/**
+ * POST /api/checkout { plan } → URL de paiement Stripe (abonnement mensuel en euros).
+ * Codes promo : gérés dans Stripe (« Promotion codes »), saisis sur la page de paiement.
+ * Un client déjà abonné est envoyé vers le portail Stripe pour changer de plan.
+ */
 export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  let plan: PlanId;
   try {
-    const session = await getServerSession(authOptions);
+    ({ plan } = checkoutSchema.parse(await request.json()));
+  } catch {
+    return NextResponse.json({ error: 'Unknown plan' }, { status: 400 });
+  }
 
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+  const priceId = stripePriceId(plan);
+  if (!stripeConfigured() || !priceId) {
+    return NextResponse.json({ error: 'Payments are not open yet. Please contact us.' }, { status: 503 });
+  }
 
-    const body = await request.json();
-    const { plan, promoCode } = checkoutSchema.parse(body);
-
-    // Get user with subscription
+  try {
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email! },
-      include: { subscriptions: true },
+      where: { email: session.user.email },
+      include: { subscriptions: { orderBy: { createdAt: 'desc' } } },
     });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const current = user.subscriptions.find((s) => s.status === 'ACTIVE' || s.status === 'PAST_DUE');
+    let customerId = user.subscriptions.find((s) => s.stripeCustomerId)?.stripeCustomerId || null;
 
-    const planConfig = STRIPE_PLANS[plan];
-    let discountAmount = 0;
-    let promoCodeRecord = null;
-
-    // Validate promo code
-    if (promoCode) {
-      promoCodeRecord = await prisma.promoCode.findUnique({
-        where: { code: promoCode.toUpperCase() },
-        include: { usages: true },
+    // Déjà abonné : changement de plan dans le portail Stripe (prorata géré par Stripe)
+    if (current?.stripeSubscriptionId && customerId) {
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: customerId,
+        return_url: `${appUrl()}/dashboard`,
       });
-
-      if (!promoCodeRecord || !promoCodeRecord.isActive) {
-        return NextResponse.json(
-          { error: 'Invalid promo code' },
-          { status: 400 }
-        );
-      }
-
-      // Check if already used by this user
-      const alreadyUsed = promoCodeRecord.usages.some(
-        (usage) => usage.userId === user.id
-      );
-
-      if (alreadyUsed) {
-        return NextResponse.json(
-          { error: 'Promo code already used' },
-          { status: 400 }
-        );
-      }
-
-      // Check if max uses reached
-      if (promoCodeRecord.maxUses && promoCodeRecord.usedCount >= promoCodeRecord.maxUses) {
-        return NextResponse.json(
-          { error: 'Promo code has reached its usage limit' },
-          { status: 400 }
-        );
-      }
-
-      // Check if expired
-      if (promoCodeRecord.expiresAt && promoCodeRecord.expiresAt < new Date()) {
-        return NextResponse.json(
-          { error: 'Promo code has expired' },
-          { status: 400 }
-        );
-      }
-
-      // Calculate discount
-      if (promoCodeRecord.type === 'PERCENTAGE') {
-        discountAmount = Math.floor((planConfig.price * promoCodeRecord.value) / 100);
-      } else if (promoCodeRecord.type === 'FIXED_AMOUNT') {
-        discountAmount = promoCodeRecord.value;
-      }
+      return NextResponse.json({ url: portal.url });
     }
 
-    const finalAmount = Math.max(0, planConfig.price - discountAmount);
-
-    // Create or get Stripe customer
-    let stripeCustomerId = user.subscriptions[0]?.stripeCustomerId;
-
-    if (!stripeCustomerId) {
+    if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
         name: user.name || undefined,
-        metadata: {
-          userId: user.id,
-        },
+        metadata: { userId: user.id },
       });
-      stripeCustomerId = customer.id;
+      customerId = customer.id;
+      if (current) {
+        await prisma.subscription.update({ where: { id: current.id }, data: { stripeCustomerId: customerId } });
+      }
     }
 
-    // Create Stripe checkout session
-    const checkoutSession = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId,
+    const checkout = await stripe.checkout.sessions.create({
+      customer: customerId,
       mode: 'subscription',
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price: planConfig.priceId,
-          quantity: 1,
-        },
-      ],
-      ...(promoCodeRecord && discountAmount > 0 && {
-        discounts: [
-          {
-            coupon: await createStripeCoupon(promoCodeRecord),
-          },
-        ],
-      }),
-      success_url: `${process.env.NEXTAUTH_URL}/dashboard?success=true`,
-      cancel_url: `${process.env.NEXTAUTH_URL}/pricing?canceled=true`,
-      metadata: {
-        userId: user.id,
-        plan,
-        promoCodeId: promoCodeRecord?.id || '',
-      },
+      line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
+      billing_address_collection: 'required',
+      tax_id_collection: { enabled: true },
+      customer_update: { address: 'auto', name: 'auto' },
+      automatic_tax: { enabled: process.env.STRIPE_AUTOMATIC_TAX === 'true' },
+      subscription_data: { metadata: { userId: user.id, plan } },
+      success_url: `${appUrl()}/dashboard?upgraded=${plan.toLowerCase()}`,
+      cancel_url: `${appUrl()}/pricing?canceled=true`,
+      metadata: { userId: user.id, plan },
     });
 
-    return NextResponse.json({
-      url: checkoutSession.url,
-      sessionId: checkoutSession.id,
-    });
+    return NextResponse.json({ url: checkout.url });
   } catch (error) {
     console.error('Checkout error:', error);
-
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Invalid request data' },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'An error occurred during checkout' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Payment could not be started. Please try again.' }, { status: 500 });
   }
-}
-
-// Helper to create Stripe coupon for promo code
-async function createStripeCoupon(promoCode: any): Promise<string> {
-  const couponId = `promo_${promoCode.code}_${Date.now()}`;
-
-  let couponParams: Stripe.CouponCreateParams;
-
-  if (promoCode.type === 'PERCENTAGE') {
-    couponParams = {
-      id: couponId,
-      percent_off: promoCode.value,
-      duration: 'once',
-      name: promoCode.description || promoCode.code,
-    };
-  } else {
-    couponParams = {
-      id: couponId,
-      amount_off: promoCode.value,
-      currency: 'usd',
-      duration: 'once',
-      name: promoCode.description || promoCode.code,
-    };
-  }
-
-  const coupon = await stripe.coupons.create(couponParams);
-  return coupon.id;
 }

@@ -6,8 +6,23 @@ import type {
   RateLimitLogData,
 } from '../application/interfaces/IUsageLogger';
 
+const RETENTION_DAYS = 90;
+let lastPurge = 0;
+
+/** Supprime une fois par heure au plus les journaux de plus de 90 jours (politique de confidentialité). */
+function purgeOldLogs() {
+  if (Date.now() - lastPurge < 3600_000) return;
+  lastPurge = Date.now();
+  const before = new Date(Date.now() - RETENTION_DAYS * 86400_000);
+  Promise.all([
+    prisma.screenshotUsageLog.deleteMany({ where: { createdAt: { lt: before } } }),
+    prisma.screenshot.deleteMany({ where: { createdAt: { lt: before } } }),
+  ]).catch((e) => console.error('Log purge failed:', e));
+}
+
 export class PrismaUsageLogger implements IUsageLogger {
   async logSuccess(data: SuccessLogData): Promise<void> {
+    purgeOldLogs();
     try {
       await prisma.screenshotUsageLog.create({
         data: {

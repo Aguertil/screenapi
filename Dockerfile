@@ -65,6 +65,12 @@ RUN npm install -g playwright@1.64.1
 # Install Playwright browsers
 RUN playwright install chromium --with-deps
 
+# Adresse publique et contact, inscrits dans le site au moment du build
+ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
+ARG NEXT_PUBLIC_CONTACT_EMAIL=
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_CONTACT_EMAIL=$NEXT_PUBLIC_CONTACT_EMAIL
+
 # Build
 RUN cd apps/screenapi && pnpm run build
 

@@ -1,7 +1,7 @@
 import { Result, success, failure, ValidationError } from '@/lib/types';
 
 export type ScreenshotId = string & { readonly __brand: 'ScreenshotId' };
-export type ImageFormat = 'PNG' | 'JPEG' | 'WEBP';
+export type ImageFormat = 'PNG' | 'JPEG' | 'WEBP' | 'PDF';
 export type ViewportType = 'DESKTOP' | 'MOBILE' | 'TABLET' | 'CUSTOM';
 
 export interface Dimensions {

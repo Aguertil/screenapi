@@ -9,6 +9,10 @@ export interface ScreenshotResult {
   format: ImageFormat;
   fileSizeBytes: number;
   durationMs: number;
+  /** Servie depuis le cache (aucun crédit consommé) */
+  cached?: boolean;
+  /** Crédits restants après cette capture */
+  creditsRemaining?: number;
 }
 
 export class CaptureError extends Error {

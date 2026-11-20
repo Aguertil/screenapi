@@ -1,0 +1,20 @@
+# HTTPS automatique (Let's Encrypt) pour le domaine du site
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000 {
+		# Les captures peuvent durer jusqu'à 60 s
+		transport http {
+			read_timeout 90s
+		}
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

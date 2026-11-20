@@ -1,0 +1,73 @@
+# Production sur un serveur dédié (Hetzner CX23 / CAX11, ~6–7 €/mois).
+# Lancement : voir deploy/README.md (script install.sh).
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: https://${DOMAIN}
+        NEXT_PUBLIC_CONTACT_EMAIL: ${CONTACT_EMAIL}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://screenapi:${POSTGRES_PASSWORD}@postgres:5432/screenapi
+      REDIS_URL: redis://redis:6379
+      NEXTAUTH_URL: https://${DOMAIN}
+      NEXT_PUBLIC_APP_URL: https://${DOMAIN}
+      PORT: "3000"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    shm_size: 1gb # Chrome a besoin de mémoire partagée
+    mem_limit: 3g
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: screenapi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: screenapi
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U screenapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - app
+
+volumes:
+  postgres_data:
+  caddy_data:

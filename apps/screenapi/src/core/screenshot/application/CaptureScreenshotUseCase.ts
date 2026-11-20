@@ -234,32 +234,7 @@ export class CaptureScreenshotUseCase {
     }
     if (cacheTtl > 0) screenshotCache.set(userId, options.cacheKey(), screenshotResult, cacheTtl);
 
-    // 8. Save screenshot metadata (optional, for history)
-    const screenshot = Screenshot.create({
-      id: crypto.randomUUID() as ScreenshotId,
-      url: request.url,
-      format: options.format,
-      dimensions: {
-        width: screenshotResult.width,
-        height: screenshotResult.height,
-      },
-      viewportType: options.viewportType,
-      metadata: {
-        url: request.url,
-        fileSizeBytes: screenshotResult.fileSizeBytes,
-        durationMs: screenshotResult.durationMs,
-        capturedAt: new Date(),
-      },
-    });
-
-    if (screenshot.success) {
-      try {
-        await this.screenshotRepository.save(screenshot.value);
-      } catch (error) {
-        // Log but don't fail
-        console.error('Failed to save screenshot metadata:', error);
-      }
-    }
+    // 8. L'historique est tenu par le journal d'usage ci-dessous (pas de double écriture)
 
     // 9. Log successful usage
     await this.usageLogger.logSuccess({

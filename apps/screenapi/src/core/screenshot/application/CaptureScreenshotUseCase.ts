@@ -8,11 +8,13 @@ import type { ISubscriptionRepository, InsufficientCreditsError } from './interf
 import type { IRateLimiter, RateLimitExceededError } from './interfaces/IRateLimiter';
 import type { IUsageLogger } from './interfaces/IUsageLogger';
 import type { IScreenshotRepository } from './interfaces/IScreenshotRepository';
+import { screenshotCache } from '../infrastructure/ScreenshotCache';
+import { getPlan } from '@/lib/plans';
 
 export interface CaptureScreenshotRequest {
   apiKey: string;
   url: string;
-  format?: 'PNG' | 'JPEG' | 'WEBP';
+  format?: 'PNG' | 'JPEG' | 'WEBP' | 'PDF';
   quality?: number;
   viewportType?: 'DESKTOP' | 'MOBILE' | 'TABLET' | 'CUSTOM';
   viewportWidth?: number;
@@ -24,6 +26,12 @@ export interface CaptureScreenshotRequest {
   blockCookies?: boolean;
   blockAds?: boolean;
   userAgent?: string;
+  darkMode?: boolean;
+  deviceScaleFactor?: number;
+  selector?: string;
+  delay?: number;
+  /** Durée de mise en cache en secondes (0 = pas de cache) */
+  cacheTtl?: number;
   ipAddress?: string;
   userAgentHeader?: string;
 }
@@ -76,10 +84,16 @@ export class CaptureScreenshotUseCase {
     const userId = apiKeyData.userId;
     const apiKeyId = apiKeyData.id;
 
-    // 2. Check rate limiting
+    // 3. Check subscription and credits
+    const subscription = await this.subscriptionRepository.findByUserId(userId);
+    if (!subscription || (subscription.status !== 'ACTIVE' && subscription.status !== 'PAST_DUE')) {
+      return failure(new NoActiveSubscriptionError());
+    }
+
+    // 3b. Limite de débit du plan (par clé)
     const rateLimitResult = await this.rateLimiter.check(
-      request.apiKey,
-      apiKeyData.rateLimit,
+      apiKeyId,
+      getPlan(subscription.plan).ratePerMinute,
       60,
     );
 
@@ -106,11 +120,6 @@ export class CaptureScreenshotUseCase {
       );
     }
 
-    // 3. Check subscription and credits
-    const subscription = await this.subscriptionRepository.findByUserId(userId);
-    if (!subscription || subscription.status !== 'ACTIVE') {
-      return failure(new NoActiveSubscriptionError());
-    }
 
     if (subscription.creditsRemaining < 1) {
       return failure(
@@ -157,6 +166,10 @@ export class CaptureScreenshotUseCase {
       blockCookies: request.blockCookies,
       blockAds: request.blockAds,
       userAgent: request.userAgent,
+      darkMode: request.darkMode,
+      deviceScaleFactor: request.deviceScaleFactor,
+      selector: request.selector,
+      delay: request.delay,
     });
 
     if (!optionsResult.success) {
@@ -176,6 +189,16 @@ export class CaptureScreenshotUseCase {
     }
 
     const options = optionsResult.value;
+    const cacheTtl = Math.min(Math.max(Math.floor(request.cacheTtl ?? 0), 0), 30 * 24 * 3600);
+
+    // 5b. Cache : gratuit et immédiat si la même capture a déjà été faite
+    if (cacheTtl > 0) {
+      const hit = screenshotCache.get(userId, options.cacheKey());
+      if (hit) {
+        await this.rateLimiter.increment(apiKeyId, 60);
+        return success({ ...hit, cached: true, durationMs: Date.now() - startTime, creditsRemaining: subscription.creditsRemaining });
+      }
+    }
 
     // 6. Capture screenshot
     const captureResult = await this.screenshotService.capture(options);
@@ -200,14 +223,16 @@ export class CaptureScreenshotUseCase {
 
     const screenshotResult = captureResult.value;
 
-    // 7. Deduct credits
+    // 7. Deduct credits (atomique : refuse si un autre appel a pris le dernier crédit)
     try {
       await this.subscriptionRepository.deductCredits(subscription.id, 1);
     } catch (error) {
-      // If credit deduction fails, we still have the screenshot
-      // Log but don't fail the request
+      if (error && typeof error === 'object' && 'creditsRemaining' in error) {
+        return failure({ ...(error as InsufficientCreditsError), code: 'INSUFFICIENT_CREDITS' } as InsufficientCreditsError);
+      }
       console.error('Failed to deduct credits:', error);
     }
+    if (cacheTtl > 0) screenshotCache.set(userId, options.cacheKey(), screenshotResult, cacheTtl);
 
     // 8. Save screenshot metadata (optional, for history)
     const screenshot = Screenshot.create({
@@ -262,8 +287,8 @@ export class CaptureScreenshotUseCase {
     }
 
     // 11. Increment rate limit counter
-    await this.rateLimiter.increment(request.apiKey, 60);
+    await this.rateLimiter.increment(apiKeyId, 60);
 
-    return success(screenshotResult);
+    return success({ ...screenshotResult, cached: false, creditsRemaining: Math.max(0, subscription.creditsRemaining - 1) });
   }
 }

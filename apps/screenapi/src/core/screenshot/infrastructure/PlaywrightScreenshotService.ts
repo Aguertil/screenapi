@@ -40,6 +40,8 @@ class BrowserPool {
     try {
       this.browser = await chromium.launch({
         headless: true,
+        // Chrome du système si fourni (serveur dédié, tests locaux), sinon celui de Playwright
+        executablePath: process.env.CHROME_PATH || undefined,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
@@ -47,8 +49,6 @@ class BrowserPool {
           '--disable-gpu',
           '--no-first-run',
           '--no-zygote',
-          '--single-process',
-          '--disable-web-security',
           '--disable-background-networking',
           '--disable-extensions',
           '--hide-scrollbars',
@@ -78,182 +78,199 @@ class BrowserPool {
   }
 }
 
+/** Domaines publicitaires et de pistage bloqués quand blockAds est demandé. */
+const AD_HOSTS = [
+  'doubleclick.net', 'googlesyndication.com', 'googleadservices.com', 'google-analytics.com',
+  'googletagmanager.com', 'adservice.google.com', 'facebook.net', 'connect.facebook.net',
+  'amazon-adsystem.com', 'adnxs.com', 'criteo.com', 'criteo.net', 'taboola.com', 'outbrain.com',
+  'scorecardresearch.com', 'hotjar.com', 'quantserve.com', 'moatads.com', 'pubmatic.com',
+  'rubiconproject.com', 'openx.net', 'adsrvr.org', 'smartadserver.com', 'teads.tv',
+];
+
+/**
+ * Limite le nombre de captures simultanées : chaque page Chrome consomme
+ * 100 à 300 Mo, et un petit serveur s'effondre sinon. Les demandes en trop
+ * attendent leur tour (au plus QUEUE_TIMEOUT_MS).
+ */
+class Semaphore {
+  private active = 0;
+  private waiting: Array<() => void> = [];
+  constructor(private readonly max: number) {}
+  async acquire(timeoutMs: number): Promise<boolean> {
+    if (this.active < this.max) {
+      this.active++;
+      return true;
+    }
+    return new Promise((resolve) => {
+      const grant = () => {
+        clearTimeout(timer);
+        this.active++;
+        resolve(true);
+      };
+      const timer = setTimeout(() => {
+        this.waiting = this.waiting.filter((w) => w !== grant);
+        resolve(false);
+      }, timeoutMs);
+      this.waiting.push(grant);
+    });
+  }
+  release() {
+    this.active--;
+    const next = this.waiting.shift();
+    if (next) next();
+  }
+}
+
+const MAX_CONCURRENCY = Math.max(1, Number(process.env.MAX_CONCURRENCY) || 3);
+const QUEUE_TIMEOUT_MS = 30_000;
+
 export class PlaywrightScreenshotService implements IScreenshotService {
   private browserPool: BrowserPool;
+  private slots = new Semaphore(MAX_CONCURRENCY);
 
   constructor() {
     this.browserPool = new BrowserPool();
   }
 
   async capture(options: ScreenshotOptions): Promise<Result<ScreenshotResult, CaptureError>> {
+    if (!(await this.slots.acquire(QUEUE_TIMEOUT_MS))) {
+      return failure(new CaptureError('Server busy, please retry in a few seconds', 'BUSY') as CaptureError);
+    }
+    try {
+      return await this.captureNow(options);
+    } finally {
+      this.slots.release();
+    }
+  }
+
+  private async captureNow(options: ScreenshotOptions): Promise<Result<ScreenshotResult, CaptureError>> {
     const startTime = Date.now();
     let context: BrowserContext | null = null;
     let page: Page | null = null;
 
     try {
-      // 1. Get browser from pool
-      const browser = await this.browserPool.getBrowser();
-
-      // 2. Create isolated context
-      context = await browser.newContext({
-        viewport: {
-          width: options.viewport.width,
-          height: options.viewport.height,
-        },
-        userAgent: options.userAgent,
-        bypassCSP: true,
-      });
-
-      // 3. Block cookies if requested
-      if (options.blockCookies) {
-        await context.route('**/*', (route) => {
-          const request = route.request();
-          if (request.resourceType() === 'document') {
-            route.continue();
-          } else {
-            // Remove cookies from requests
-            route.continue({
-              headers: {
-                ...request.headers(),
-                cookie: '',
-              },
-            });
-          }
-        });
-      }
-
-      // 4. Block ads if requested
-      if (options.blockAds) {
-        await context.route('**/*', (route) => {
-          const url = route.request().url();
-          const adDomains = [
-            'doubleclick.net',
-            'googlesyndication.com',
-            'googleadservices.com',
-            'google-analytics.com',
-            'facebook.net',
-            'googletagmanager.com',
-          ];
-
-          if (adDomains.some((domain) => url.includes(domain))) {
-            route.abort();
-          } else {
-            route.continue();
-          }
-        });
-      }
-
-      // Protection SSRF : enregistrée en dernier pour s'exécuter avant les autres
-      await installNetworkGuard(context);
-
       if (!(await isPublicUrl(options.url))) {
         return failure(
           new CaptureError('URL pointing to a private network is not allowed', 'NAVIGATION_FAILED') as CaptureError,
         );
       }
 
-      // 5. Create page
-      page = await context.newPage();
-
-      // 6. Navigate to URL
-      const response = await page.goto(options.url, {
-        waitUntil: 'networkidle',
-        timeout: options.waitForTimeout,
+      const browser = await this.browserPool.getBrowser();
+      context = await browser.newContext({
+        viewport: { width: options.viewport.width, height: options.viewport.height },
+        deviceScaleFactor: options.deviceScaleFactor,
+        userAgent: options.userAgent,
+        colorScheme: options.darkMode ? 'dark' : 'light',
+        locale: 'en-US',
+        ignoreHTTPSErrors: true,
       });
 
-      if (!response || !response.ok()) {
-        return failure(
-          new CaptureError(
-            `Failed to load URL: ${response?.status() || 'unknown'}`,
-            'NAVIGATION_FAILED',
-          ) as CaptureError,
-        );
+      // Blocage des publicités (un seul gestionnaire, qui laisse la main au suivant)
+      if (options.blockAds) {
+        await context.route('**/*', async (route) => {
+          let host = '';
+          try {
+            host = new URL(route.request().url()).hostname;
+          } catch {
+            /* URL illisible : laisser passer */
+          }
+          if (AD_HOSTS.some((d) => host === d || host.endsWith('.' + d))) await route.abort();
+          else await route.fallback();
+        });
       }
 
-      // 7. Wait for specific selector if requested
+      // Protection SSRF : enregistrée en dernier pour s'exécuter en premier
+      await installNetworkGuard(context);
+
+      page = await context.newPage();
+      const response = await page.goto(options.url, { waitUntil: 'load', timeout: options.waitForTimeout });
+      if (!response) {
+        return failure(new CaptureError('The page did not respond', 'NAVIGATION_FAILED') as CaptureError);
+      }
+      // Laisser finir les chargements tardifs, sans bloquer sur les pages qui ne s'arrêtent jamais
+      await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+
       if (options.waitForSelector) {
         try {
-          await page.waitForSelector(options.waitForSelector, {
-            timeout: options.waitForTimeout,
-          });
+          await page.waitForSelector(options.waitForSelector, { timeout: options.waitForTimeout });
         } catch (error) {
           return failure(
-            new CaptureError(
-              `Selector not found: ${options.waitForSelector}`,
-              'SELECTOR_NOT_FOUND',
-              error instanceof Error ? error : undefined,
-            ) as CaptureError,
+            new CaptureError(`Selector not found: ${options.waitForSelector}`, 'SELECTOR_NOT_FOUND', error as Error) as CaptureError,
           );
         }
       }
 
-      // 8. Hide cookie banners automatically
-      if (options.blockCookies) {
-        await this.hideCookieBanners(page);
+      if (options.blockCookies) await this.hideCookieBanners(page);
+
+      if (options.hideElements.length > 0) {
+        await page
+          .addStyleTag({ content: options.hideElements.map((sel) => `${sel}{display:none!important}`).join('\n') })
+          .catch(() => {});
       }
 
-      // 9. Hide custom elements if requested
-      if (options.hideElements && options.hideElements.length > 0) {
-        for (const selector of options.hideElements) {
+      if (options.delay > 0) await page.waitForTimeout(options.delay);
+
+      let buffer: Buffer;
+      let width = options.viewport.width;
+      let height = options.viewport.height;
+
+      if (options.format === 'PDF') {
+        await page.emulateMedia({ media: 'screen' });
+        buffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '0', right: '0', bottom: '0', left: '0' } });
+        width = 794;
+        height = 1123;
+      } else {
+        const type = options.format.toLowerCase() as 'png' | 'jpeg' | 'webp';
+        const shotOptions = {
+          // Playwright ne produit que PNG et JPEG : le WebP est converti ensuite (sharp)
+          type: (type === 'webp' ? 'png' : type) as 'png' | 'jpeg',
+          quality: type === 'jpeg' ? options.quality : undefined,
+        };
+        if (options.selector) {
+          const element = page.locator(options.selector).first();
           try {
-            await page.evaluate((sel) => {
-              const elements = document.querySelectorAll(sel);
-              elements.forEach((el) => {
-                (el as HTMLElement).style.display = 'none';
-              });
-            }, selector);
-          } catch {
-            // Ignore if selector doesn't match
+            await element.waitFor({ state: 'visible', timeout: 5000 });
+          } catch (error) {
+            return failure(new CaptureError(`Element not found: ${options.selector}`, 'SELECTOR_NOT_FOUND', error as Error) as CaptureError);
+          }
+          buffer = await element.screenshot(shotOptions);
+          const box = await element.boundingBox();
+          width = Math.round(box?.width ?? width);
+          height = Math.round(box?.height ?? height);
+        } else {
+          buffer = await page.screenshot({ ...shotOptions, fullPage: options.fullPage });
+          if (options.fullPage) {
+            const dims = await page.evaluate(() => ({
+              width: document.documentElement.scrollWidth,
+              height: document.documentElement.scrollHeight,
+            }));
+            width = dims.width;
+            height = dims.height;
           }
         }
       }
 
-      // 10. Capture screenshot
-      const buffer = await page.screenshot({
-        type: options.format.toLowerCase() as 'png' | 'jpeg' | 'webp',
-        quality: options.quality,
-        fullPage: options.fullPage,
-      });
-
-      // 11. Get dimensions
-      const dimensions = await page.evaluate(() => ({
-        width: document.documentElement.scrollWidth,
-        height: document.documentElement.scrollHeight,
-      }));
-
-      const durationMs = Date.now() - startTime;
+      if (options.format === 'WEBP') {
+        const sharp = (await import('sharp')).default;
+        buffer = await sharp(buffer).webp({ quality: options.quality ?? 80 }).toBuffer();
+      }
 
       return success({
         buffer: Buffer.from(buffer),
-        width: dimensions.width,
-        height: dimensions.height,
+        width,
+        height,
         format: options.format,
         fileSizeBytes: buffer.byteLength,
-        durationMs,
+        durationMs: Date.now() - startTime,
       });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      const errorCode = this.categorizeError(error);
-
+      const errorMessage = error instanceof Error ? error.message.split('\n')[0] : 'Unknown error';
       return failure(
-        new CaptureError(errorMessage, errorCode, error instanceof Error ? error : undefined) as CaptureError,
+        new CaptureError(errorMessage, this.categorizeError(error), error instanceof Error ? error : undefined) as CaptureError,
       );
     } finally {
-      // Cleanup
-      if (page) {
-        try {
-          await page.close();
-        } catch (error) {
-          console.error('Error closing page:', error);
-        }
-      }
-      if (context) {
-        try {
-          await context.close();
-        } catch (error) {
-          console.error('Error closing context:', error);
-        }
-      }
+      if (page) await page.close().catch(() => {});
+      if (context) await context.close().catch(() => {});
     }
   }
 

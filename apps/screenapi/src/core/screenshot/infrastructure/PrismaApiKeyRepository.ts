@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { hashApiKey } from '@/lib/apiKeys';
 import type {
   IApiKeyRepository,
   ApiKeyData,
@@ -8,7 +9,7 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
   async findByKey(key: string): Promise<ApiKeyData | null> {
     try {
       const apiKey = await prisma.apiKey.findUnique({
-        where: { key },
+        where: { key: hashApiKey(key) },
         select: {
           id: true,
           key: true,

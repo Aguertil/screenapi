@@ -74,6 +74,7 @@ EXPOSE 3000
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Start
+# Start (schéma Prisma puis Next.js)
+COPY scripts/docker-start.sh /app/scripts/docker-start.sh
 WORKDIR /app/apps/screenapi
-CMD ["pnpm", "start"]
+CMD ["sh", "/app/scripts/docker-start.sh"]

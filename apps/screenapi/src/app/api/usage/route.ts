@@ -18,7 +18,7 @@ export async function GET() {
       where: { email: session.user.email! },
       include: {
         subscriptions: {
-          where: { status: 'ACTIVE' },
+          where: { status: { in: ['ACTIVE', 'PAST_DUE'] } },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },

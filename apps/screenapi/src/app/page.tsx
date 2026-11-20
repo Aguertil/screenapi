@@ -1,284 +1,113 @@
 import Link from 'next/link';
+import { SiteHeader } from '@/components/site/SiteHeader';
+import { SiteFooter } from '@/components/site/SiteFooter';
+import { TryIt } from '@/components/site/TryIt';
+import { CodeTabs } from '@/components/site/CodeTabs';
+import { PricingTable } from '@/components/site/PricingTable';
+import { DEVICE_PRESETS } from '@/core/screenshot/domain/device-presets';
 
-export default function HomePage() {
+const FEATURES = [
+  { title: 'Full page or viewport', text: 'Capture what fits on screen, or scroll the whole page into one tall image.' },
+  { title: `${Object.keys(DEVICE_PRESETS).length} real devices`, text: 'iPhone, Galaxy, Pixel, iPad, MacBook… with the right size, pixel density and user agent.' },
+  { title: 'PNG, JPEG, WebP, PDF', text: 'Images for previews and thumbnails, A4 PDFs for archiving and reports.' },
+  { title: 'Clean captures', text: 'Cookie banners hidden and ad networks blocked, so the page looks like the page.' },
+  { title: 'One element only', text: 'Pass a CSS selector to capture a chart, a pricing table or a single card.' },
+  { title: 'Dark mode and Retina', text: 'Render in dark mode, at 2× or 3× pixel density, after a delay you choose.' },
+  { title: 'Free cache hits', text: 'Ask for the same capture again within your cache time and it costs nothing.' },
+  { title: 'Built to be safe', text: 'Private networks are blocked, keys are stored hashed, captures are never kept on our side.' },
+];
+
+const FAQ = [
+  { q: 'What counts as a screenshot?', a: 'Each successful capture uses one credit, whatever its size or format. Failed captures and answers served from your cache are free.' },
+  { q: 'What happens when I run out?', a: 'The API answers with a clear 402 error until your quota resets at the start of your next month, or until you move to a larger plan. You are never billed for overage.' },
+  { q: 'Can I cancel anytime?', a: 'Yes. Cancel from your dashboard and your plan stays active until the end of the month you paid for, then you return to the free plan.' },
+  { q: 'Do you keep my screenshots?', a: 'No. Images are sent back to you and not stored. Only usage metadata (URL, time, size) is kept for 90 days for your usage history and billing.' },
+  { q: 'Do I get a VAT invoice?', a: 'Yes, every payment comes with an invoice. Add your company VAT number at checkout.' },
+];
+
+export default function Home() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      {/* Navigation */}
-      <nav className="border-b border-white/10 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <span className="text-2xl font-bold text-white">ScreenAPI</span>
-            </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/playground" className="text-gray-300 hover:text-white transition">
-                Playground
+    <>
+      <SiteHeader />
+      <main>
+        <section className="mx-auto grid max-w-page gap-12 px-5 pb-16 pt-14 lg:grid-cols-[1fr_1.1fr] lg:items-start lg:pt-20">
+          <div>
+            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl">
+              Screenshots of any web page, from one API call.
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted">
+              Send a URL, get back a PNG, JPEG, WebP or PDF. Full page, mobile devices, dark mode, without cookie
+              banners. 100 screenshots free every month, then from €9.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link href="/auth/signup" className="rounded-md bg-ink px-5 py-3 font-medium text-white hover:bg-black">
+                Get a free API key
               </Link>
-              <Link href="/docs" className="text-gray-300 hover:text-white transition">
-                Documentation
-              </Link>
-              <Link href="/pricing" className="text-gray-300 hover:text-white transition">
-                Pricing
-              </Link>
-              <Link href="/auth/signin" className="text-gray-300 hover:text-white transition">
-                Sign In
-              </Link>
-              <Link href="/auth/signup" className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
-                Sign Up Free
+              <Link href="/docs" className="rounded-md border border-line px-5 py-3 font-medium hover:border-ink">
+                Read the docs
               </Link>
             </div>
+            <dl className="mt-10 grid max-w-md grid-cols-3 gap-4 border-t border-line pt-6 text-sm">
+              <div><dt className="text-muted">Free plan</dt><dd className="mt-1 font-semibold">100 / month</dd></div>
+              <div><dt className="text-muted">Paid plans</dt><dd className="mt-1 font-semibold">from €9</dd></div>
+              <div><dt className="text-muted">Card needed</dt><dd className="mt-1 font-semibold">No</dd></div>
+            </dl>
           </div>
-        </div>
-      </nav>
+          <div id="try">
+            <TryIt />
+          </div>
+        </section>
 
-      {/* Hero Section */}
-      <section className="pt-20 pb-32 px-4">
-        <div className="max-w-7xl mx-auto text-center">
-          <h1 className="text-5xl md:text-7xl font-bold text-white mb-6">
-            Capture Any Website
-            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
-              In Milliseconds
-            </span>
-          </h1>
-          <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto">
-            Professional screenshot API built with Playwright. Fast, reliable, and scalable. 
-            Perfect for automation, testing, and monitoring.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              href="/auth/signup"
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition transform hover:scale-105"
-            >
-              Start Free Trial
-            </Link>
-            <Link 
-              href="/docs"
-              className="bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-lg text-lg font-semibold transition backdrop-blur-sm border border-white/20"
-            >
-              View Documentation
-            </Link>
+        <section className="border-y border-line bg-surface">
+          <div className="mx-auto grid max-w-page gap-10 px-5 py-16 lg:grid-cols-[0.8fr_1.2fr] lg:items-center">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight">Works from any language</h2>
+              <p className="mt-3 max-w-md leading-relaxed text-muted">
+                It&apos;s one HTTP request. Send parameters as JSON with POST, or in the URL with GET to drop a capture straight
+                into a server-side job. Your key goes in the <code className="text-ink">x-api-key</code> header.
+              </p>
+              <Link href="/docs" className="mt-5 inline-block font-medium underline decoration-accent decoration-2 underline-offset-4">
+                All parameters
+              </Link>
+            </div>
+            <CodeTabs />
           </div>
-          
-          {/* Quick Stats */}
-          <div className="grid grid-cols-3 gap-8 mt-20 max-w-3xl mx-auto">
-            <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">&lt;800ms</div>
-              <div className="text-gray-400">Average Response</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">99.9%</div>
-              <div className="text-gray-400">Uptime SLA</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-white mb-2">5000+</div>
-              <div className="text-gray-400">API Calls/Day</div>
-            </div>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features Grid */}
-      <section className="py-20 px-4 bg-white/5 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-bold text-white text-center mb-16">
-            Powerful Features
-          </h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: "🚀",
-                title: "Lightning Fast",
-                desc: "Browser pooling and smart caching for sub-second responses"
-              },
-              {
-                icon: "🎨",
-                title: "Multiple Formats",
-                desc: "PNG, JPEG, WEBP with customizable quality settings"
-              },
-              {
-                icon: "📱",
-                title: "Responsive Viewports",
-                desc: "Desktop, mobile, tablet, or custom viewport sizes"
-              },
-              {
-                icon: "🛡️",
-                title: "Anti-SSRF Protection",
-                desc: "Built-in security against server-side request forgery"
-              },
-              {
-                icon: "🍪",
-                title: "Cookie Banner Blocking",
-                desc: "Automatically removes cookie consent popups"
-              },
-              {
-                icon: "⚡",
-                title: "Rate Limiting",
-                desc: "Redis-backed rate limiting with in-memory fallback"
-              }
-            ].map((feature, i) => (
-              <div key={i} className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-6 hover:bg-white/15 transition">
-                <div className="text-4xl mb-4">{feature.icon}</div>
-                <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
-                <p className="text-gray-300">{feature.desc}</p>
+        <section className="mx-auto max-w-page px-5 py-20">
+          <h2 className="text-2xl font-semibold tracking-tight">What you can capture</h2>
+          <div className="mt-8 grid gap-x-10 gap-y-8 sm:grid-cols-2 lg:grid-cols-4">
+            {FEATURES.map((f) => (
+              <div key={f.title} className="border-t border-ink pt-4">
+                <h3 className="font-semibold">{f.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{f.text}</p>
               </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Pricing */}
-      <section className="py-20 px-4">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-4xl font-bold text-white text-center mb-16">
-            Simple, Transparent Pricing
-          </h2>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                name: "Free",
-                price: "$0",
-                credits: "1,000",
-                rate: "10 req/min",
-                features: ["Basic screenshots", "PNG format", "Desktop viewport", "Community support"]
-              },
-              {
-                name: "Pro",
-                price: "$29",
-                credits: "5,000",
-                rate: "60 req/min",
-                features: ["All formats", "All viewports", "Cookie blocking", "Ad blocking", "Priority support"],
-                popular: true
-              },
-              {
-                name: "Enterprise",
-                price: "$99",
-                credits: "20,000",
-                rate: "300 req/min",
-                features: ["Everything in Pro", "Custom domains", "SLA guarantee", "Dedicated support", "Custom integrations"]
-              }
-            ].map((plan, i) => (
-              <div 
-                key={i} 
-                className={`rounded-xl p-8 ${
-                  plan.popular 
-                    ? 'bg-gradient-to-br from-purple-600 to-pink-600 transform scale-105' 
-                    : 'bg-white/10 backdrop-blur-sm border border-white/20'
-                }`}
-              >
-                {plan.popular && (
-                  <div className="text-sm font-semibold text-white/90 mb-2">MOST POPULAR</div>
-                )}
-                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
-                <div className="text-4xl font-bold text-white mb-1">{plan.price}<span className="text-xl text-gray-300">/mo</span></div>
-                <div className="text-gray-300 mb-6">{plan.credits} credits/month</div>
-                <div className="text-sm text-gray-300 mb-6">Rate limit: {plan.rate}</div>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, j) => (
-                    <li key={j} className="flex items-center text-gray-200">
-                      <svg className="w-5 h-5 mr-2 text-green-400" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-                      </svg>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-                <button className={`w-full py-3 rounded-lg font-semibold transition ${
-                  plan.popular 
-                    ? 'bg-white text-purple-600 hover:bg-gray-100' 
-                    : 'bg-white/20 text-white hover:bg-white/30'
-                }`}>
-                  Get Started
-                </button>
-              </div>
+        <section id="pricing" className="mx-auto max-w-page px-5 pb-20">
+          <h2 className="text-2xl font-semibold tracking-tight">Pricing</h2>
+          <p className="mt-2 max-w-xl text-muted">Every option on every plan. You only choose how many screenshots you need.</p>
+          <div className="mt-8"><PricingTable /></div>
+        </section>
+
+        <section className="mx-auto max-w-page px-5">
+          <h2 className="text-2xl font-semibold tracking-tight">Questions</h2>
+          <div className="mt-6 divide-y divide-line border-y border-line">
+            {FAQ.map((item) => (
+              <details key={item.q} className="group py-4">
+                <summary className="cursor-pointer list-none font-medium marker:hidden">
+                  <span className="mr-2 inline-block text-accent transition-transform group-open:rotate-45">+</span>
+                  {item.q}
+                </summary>
+                <p className="mt-2 max-w-3xl pl-6 leading-relaxed text-muted">{item.a}</p>
+              </details>
             ))}
           </div>
-        </div>
-      </section>
-
-      {/* Code Example */}
-      <section className="py-20 px-4 bg-white/5 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-4xl font-bold text-white text-center mb-16">
-            Simple to Integrate
-          </h2>
-          <div className="bg-slate-900 rounded-xl p-8 border border-white/20 overflow-hidden">
-            <div className="flex items-center mb-4">
-              <div className="flex space-x-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-              </div>
-              <span className="ml-4 text-gray-400 text-sm">curl</span>
-            </div>
-            <pre className="text-green-400 text-sm overflow-x-auto">
-{`curl -X POST http://localhost:43210/api/v1/screenshot \\
-  -H "x-api-key: YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "url": "https://example.com",
-    "format": "PNG",
-    "viewportType": "DESKTOP"
-  }' \\
-  --output screenshot.png`}
-            </pre>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 px-4">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-            Ready to Get Started?
-          </h2>
-          <p className="text-xl text-gray-300 mb-8">
-            Create your free account and start capturing screenshots in minutes.
-          </p>
-          <Link 
-            href="/api/admin/setup"
-            className="inline-block bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 rounded-lg text-lg font-semibold transition transform hover:scale-105"
-          >
-            Start Free Trial →
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-white/10 py-12 px-4">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-4 gap-8">
-          <div>
-            <h3 className="text-white font-bold mb-4">ScreenAPI</h3>
-            <p className="text-gray-400 text-sm">Professional screenshot API for developers</p>
-          </div>
-          <div>
-            <h4 className="text-white font-semibold mb-4">Product</h4>
-            <ul className="space-y-2 text-gray-400 text-sm">
-              <li><Link href="/docs" className="hover:text-white transition">Documentation</Link></li>
-              <li><Link href="/dashboard" className="hover:text-white transition">Dashboard</Link></li>
-              <li><Link href="/api/health" className="hover:text-white transition">Status</Link></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-white font-semibold mb-4">Company</h4>
-            <ul className="space-y-2 text-gray-400 text-sm">
-              <li><a href="#" className="hover:text-white transition">About</a></li>
-              <li><a href="#" className="hover:text-white transition">Blog</a></li>
-              <li><a href="#" className="hover:text-white transition">Careers</a></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-white font-semibold mb-4">Legal</h4>
-            <ul className="space-y-2 text-gray-400 text-sm">
-              <li><a href="#" className="hover:text-white transition">Privacy</a></li>
-              <li><a href="#" className="hover:text-white transition">Terms</a></li>
-              <li><a href="#" className="hover:text-white transition">Security</a></li>
-            </ul>
-          </div>
-        </div>
-        <div className="max-w-7xl mx-auto mt-8 pt-8 border-t border-white/10 text-center text-gray-400 text-sm">
-          © 2026 ScreenAPI. All rights reserved.
-        </div>
-      </footer>
-    </div>
+        </section>
+      </main>
+      <SiteFooter />
+    </>
   );
 }

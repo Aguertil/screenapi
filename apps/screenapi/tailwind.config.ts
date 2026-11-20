@@ -9,9 +9,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: "var(--background)",
-        foreground: "var(--foreground)",
+        ink: "var(--ink)",
+        muted: "var(--muted)",
+        line: "var(--line)",
+        surface: "var(--surface)",
+        accent: "var(--accent)",
       },
+      maxWidth: { page: "72rem" },
     },
   },
   plugins: [],

@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { chromium } from 'playwright-core';
-import { PrismaApiKeyRepository } from '@/core/screenshot/infrastructure';
+import {
+  PrismaApiKeyRepository,
+  PrismaSubscriptionRepository,
+  RedisRateLimiter,
+} from '@/core/screenshot/infrastructure';
 import { UrlValidator } from '@/core/screenshot/domain/UrlValidator';
 import { installNetworkGuard, isPublicUrl } from '@/core/screenshot/infrastructure/NetworkGuard';
+
+const SCRAPE_CREDIT_COST = 1;
+
+// One limiter per server instance (in-memory fallback when REDIS_URL is absent)
+let rateLimiter: RedisRateLimiter | null = null;
+function getRateLimiter(): RedisRateLimiter {
+  if (!rateLimiter) rateLimiter = new RedisRateLimiter(process.env.REDIS_URL);
+  return rateLimiter;
+}
 
 const scrapeRequestSchema = z.object({
   url: z.string().url('Invalid URL format'),
@@ -82,12 +95,44 @@ export async function POST(request: NextRequest) {
       throw error;
     }
 
-    // 3. Check the API key really exists and is active
+    // 3. Check the API key, rate limit and credits (same rules as /v1/screenshot)
     const apiKeys = new PrismaApiKeyRepository();
-    if (!(await apiKeys.isValid(apiKey))) {
+    const keyData = await apiKeys.findByKey(apiKey);
+    if (!keyData || !keyData.isActive || (keyData.expiresAt && keyData.expiresAt < new Date())) {
       return NextResponse.json(
         { error: 'Invalid API key', message: 'The API key is invalid or inactive', code: 'INVALID_API_KEY' },
         { status: 401 }
+      );
+    }
+
+    const limiter = getRateLimiter();
+    const rate = await limiter.check(apiKey, keyData.rateLimit, 60);
+    if (!rate.allowed) {
+      const retryAfter = rate.retryAfter || 60;
+      return NextResponse.json(
+        { error: 'Rate limit exceeded', message: `Try again in ${retryAfter}s`, code: 'RATE_LIMIT_EXCEEDED' },
+        { status: 429, headers: { 'Retry-After': String(retryAfter) } }
+      );
+    }
+
+    const subscriptions = new PrismaSubscriptionRepository();
+    const subscription = await subscriptions.findByUserId(keyData.userId);
+    if (!subscription || subscription.status !== 'ACTIVE') {
+      return NextResponse.json(
+        { error: 'No active subscription', message: 'No active subscription found', code: 'NO_ACTIVE_SUBSCRIPTION' },
+        { status: 402 }
+      );
+    }
+    if (subscription.creditsRemaining < SCRAPE_CREDIT_COST) {
+      return NextResponse.json(
+        {
+          error: 'Insufficient credits',
+          message: 'Insufficient credits',
+          code: 'INSUFFICIENT_CREDITS',
+          creditsRemaining: subscription.creditsRemaining,
+          creditsRequired: SCRAPE_CREDIT_COST,
+        },
+        { status: 402 }
       );
     }
 
@@ -229,9 +274,15 @@ export async function POST(request: NextRequest) {
 
       await browser.close();
 
+      // Billing: only successful scrapes cost credits
+      await subscriptions.deductCredits(subscription.id, SCRAPE_CREDIT_COST);
+      await limiter.increment(apiKey, 60);
+      apiKeys.updateLastUsed(keyData.id).catch(() => {});
+
       return NextResponse.json({
         success: true,
         data: result,
+        creditsRemaining: subscription.creditsRemaining - SCRAPE_CREDIT_COST,
       });
 
     } catch (error: any) {

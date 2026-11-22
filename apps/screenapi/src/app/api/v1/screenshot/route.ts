@@ -63,6 +63,7 @@ const HINTS: Record<string, string> = {
   RATE_LIMIT_EXCEEDED: 'Too many requests per minute for your plan. Slow down or upgrade.',
   TIMEOUT: 'The page took too long to load. Try a longer timeout or a simpler page.',
   BUSY: 'All capture slots are busy. Retry in a few seconds.',
+  NO_ACTIVE_SUBSCRIPTION: 'Your account is inactive or suspended. Contact support.',
 };
 
 function errorResponse(code: string, message: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) {

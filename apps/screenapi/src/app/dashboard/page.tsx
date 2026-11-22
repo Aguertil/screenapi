@@ -85,6 +85,11 @@ function Dashboard() {
           Your last payment failed. Update your card in billing to keep your plan.
         </p>
       )}
+      {sub?.status === 'SUSPENDED' && (
+        <p className="mt-6 rounded-md border border-red-700 px-4 py-3 text-sm text-red-700">
+          Your account is suspended: the API refuses your requests. Contact support to reactivate it.
+        </p>
+      )}
       {error && <p role="alert" className="mt-6 text-sm text-red-700">{error}</p>}
 
       <section className="mt-8 grid gap-4 md:grid-cols-3">

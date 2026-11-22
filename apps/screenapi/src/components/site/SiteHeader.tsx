@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 
 export function SiteHeader() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const loggedIn = status === 'authenticated';
+  const isAdmin = Boolean((session?.user as { isAdmin?: boolean } | undefined)?.isAdmin);
   return (
     <header className="border-b border-line">
       <div className="mx-auto flex max-w-page items-center justify-between gap-4 px-5 py-4">
@@ -18,6 +19,9 @@ export function SiteHeader() {
         <nav className="flex items-center gap-1 text-sm sm:gap-4">
           <Link href="/docs" className="px-2 py-1 text-muted hover:text-ink">Docs</Link>
           <Link href="/pricing" className="px-2 py-1 text-muted hover:text-ink">Pricing</Link>
+          {loggedIn && isAdmin && (
+            <Link href="/admin" className="px-2 py-1 text-muted hover:text-ink">Admin</Link>
+          )}
           {loggedIn ? (
             <Link href="/dashboard" className="rounded-md bg-ink px-3 py-1.5 font-medium text-white hover:bg-black">
               Dashboard

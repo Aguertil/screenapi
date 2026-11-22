@@ -11,7 +11,7 @@ export class PrismaSubscriptionRepository implements ISubscriptionRepository {
   async findByUserId(userId: string): Promise<SubscriptionData | null> {
     try {
       let subscription = await prisma.subscription.findFirst({
-        where: { userId, status: { in: ['ACTIVE', 'PAST_DUE'] } },
+        where: { userId, status: { notIn: ['CANCELED', 'EXPIRED'] } },
         orderBy: { createdAt: 'desc' },
       });
 

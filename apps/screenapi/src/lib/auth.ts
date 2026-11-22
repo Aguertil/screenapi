@@ -1,3 +1,4 @@
+import { isAdminEmail } from './adminEmails';
 import { NextAuthOptions } from 'next-auth';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import GoogleProvider from 'next-auth/providers/google';
@@ -70,6 +71,8 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name;
         session.user.email = token.email;
         session.user.image = token.picture;
+        // Affichage du lien Admin seulement : l'accès est revérifié côté serveur
+        (session.user as { isAdmin?: boolean }).isAdmin = isAdminEmail(token.email);
       }
 
       return session;

@@ -57,3 +57,5 @@ playwright/.cache/
 .env*
 deploy/.env
 deploy/backups/
+!.env.example
+!deploy/.env.example

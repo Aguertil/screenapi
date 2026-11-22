@@ -51,6 +51,16 @@ export async function GET() {
     }
   }
 
+  // Diagnostic sans secret : forme de DATABASE_URL (jamais sa valeur)
+  if (checks.database?.status === 'error') {
+    const raw = process.env.DATABASE_URL;
+    checks.database.message = !raw
+      ? 'DATABASE_URL is empty'
+      : /^postgres(ql)?:\/\//.test(raw)
+        ? 'DATABASE_URL looks valid but the database cannot be reached'
+        : `DATABASE_URL is malformed (length ${raw.length}, does not start with postgresql://)`;
+  }
+
   // Overall status
   const allOk = Object.values(checks).every((check) => check.status === 'ok');
   const status = allOk ? 'healthy' : 'degraded';

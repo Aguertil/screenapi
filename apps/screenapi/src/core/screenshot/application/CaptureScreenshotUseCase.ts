@@ -12,8 +12,12 @@ import { screenshotCache } from '../infrastructure/ScreenshotCache';
 import { getPlan } from '@/lib/plans';
 
 export interface CaptureScreenshotRequest {
-  apiKey: string;
-  url: string;
+  /** Clé API en clair (en-tête ou access_key) */
+  apiKey?: string;
+  /** Clé déjà authentifiée par une URL signée (key_id + signature) */
+  apiKeyId?: string;
+  url?: string;
+  html?: string;
   format?: 'PNG' | 'JPEG' | 'WEBP' | 'PDF';
   quality?: number;
   viewportType?: 'DESKTOP' | 'MOBILE' | 'TABLET' | 'CUSTOM';
@@ -30,6 +34,16 @@ export interface CaptureScreenshotRequest {
   deviceScaleFactor?: number;
   selector?: string;
   delay?: number;
+  click?: string;
+  styles?: string;
+  scripts?: string;
+  lazyLoad?: boolean;
+  omitBackground?: boolean;
+  reducedMotion?: boolean;
+  blockChats?: boolean;
+  geolocation?: { latitude: number; longitude: number; accuracy?: number };
+  timezone?: string;
+  locale?: string;
   /** Durée de mise en cache en secondes (0 = pas de cache) */
   cacheTtl?: number;
   ipAddress?: string;
@@ -71,7 +85,13 @@ export class CaptureScreenshotUseCase {
     const startTime = Date.now();
 
     // 1. Validate and find API key
-    const apiKeyData = await this.apiKeyRepository.findByKey(request.apiKey);
+    const apiKeyData = request.apiKeyId
+      ? await this.apiKeyRepository.findById(request.apiKeyId)
+      : request.apiKey
+        ? await this.apiKeyRepository.findByKey(request.apiKey)
+        : null;
+    // Ce que l'on note dans l'historique : l'URL, ou la taille du HTML fourni
+    const target = request.html !== undefined ? `html:${Buffer.byteLength(request.html)} bytes` : request.url || '';
     if (!apiKeyData || !apiKeyData.isActive) {
       return failure(new InvalidApiKeyError());
     }
@@ -133,14 +153,14 @@ export class CaptureScreenshotUseCase {
       );
     }
 
-    // 4. Validate URL (anti-SSRF)
-    const urlValidation = UrlValidator.validate(request.url);
+    // 4. Validate URL (anti-SSRF) — le HTML fourni passe par le garde réseau du navigateur
+    const urlValidation = request.html !== undefined ? success(undefined) : UrlValidator.validate(request.url || '');
     if (!urlValidation.success) {
       // Log validation failure
       await this.usageLogger.logFailure({
         userId,
         apiKeyId,
-        url: request.url,
+        url: target,
         errorMessage: urlValidation.error.message,
         errorCode: 'INVALID_URL',
         durationMs: Date.now() - startTime,
@@ -154,6 +174,7 @@ export class CaptureScreenshotUseCase {
     // 5. Create screenshot options
     const optionsResult = ScreenshotOptions.create({
       url: request.url,
+      html: request.html,
       format: request.format,
       quality: request.quality,
       viewportType: request.viewportType,
@@ -170,6 +191,16 @@ export class CaptureScreenshotUseCase {
       deviceScaleFactor: request.deviceScaleFactor,
       selector: request.selector,
       delay: request.delay,
+      click: request.click,
+      styles: request.styles,
+      scripts: request.scripts,
+      lazyLoad: request.lazyLoad,
+      omitBackground: request.omitBackground,
+      reducedMotion: request.reducedMotion,
+      blockChats: request.blockChats,
+      geolocation: request.geolocation,
+      timezone: request.timezone,
+      locale: request.locale,
     });
 
     if (!optionsResult.success) {
@@ -177,7 +208,7 @@ export class CaptureScreenshotUseCase {
       await this.usageLogger.logFailure({
         userId,
         apiKeyId,
-        url: request.url,
+        url: target,
         errorMessage: optionsResult.error.message,
         errorCode: 'INVALID_OPTIONS',
         durationMs: Date.now() - startTime,
@@ -208,7 +239,7 @@ export class CaptureScreenshotUseCase {
       await this.usageLogger.logFailure({
         userId,
         apiKeyId,
-        url: request.url,
+        url: target,
         errorMessage: captureResult.error.message,
         errorCode: captureResult.error.code,
         durationMs: Date.now() - startTime,
@@ -240,7 +271,7 @@ export class CaptureScreenshotUseCase {
     await this.usageLogger.logSuccess({
       userId,
       apiKeyId,
-      url: request.url,
+      url: target,
       format: options.format,
       viewportType: options.viewportType,
       viewportWidth: options.viewport.width,

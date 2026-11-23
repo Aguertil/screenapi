@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createCaptureScreenshotUseCase } from '@/core/screenshot/infrastructure';
 import { getDevicePreset } from '@/core/screenshot/domain/device-presets';
+import { PrismaApiKeyRepository } from '@/core/screenshot/infrastructure/PrismaApiKeyRepository';
+import { verifySignature } from '@/lib/signing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,7 +12,8 @@ const bool = z.preprocess((v) => (v === 'true' || v === '1' ? true : v === 'fals
 const num = z.coerce.number();
 
 const schema = z.object({
-  url: z.string().url('Invalid URL format'),
+  url: z.string().url('Invalid URL format').optional(),
+  html: z.string().max(2 * 1024 * 1024).optional(),
   format: z.preprocess((v) => (typeof v === 'string' ? v.toUpperCase().replace('JPG', 'JPEG') : v), z.enum(['PNG', 'JPEG', 'WEBP', 'PDF'])).default('PNG'),
   quality: num.int().min(1).max(100).optional(),
   viewportType: z.preprocess((v) => (typeof v === 'string' ? v.toUpperCase() : v), z.enum(['DESKTOP', 'MOBILE', 'TABLET', 'CUSTOM'])).optional(),
@@ -29,7 +32,20 @@ const schema = z.object({
   selector: z.string().max(500).optional(),
   delay: num.int().min(0).max(10000).optional(),
   cacheTtl: num.int().min(0).max(2592000).optional(),
-});
+  click: z.string().max(500).optional(),
+  styles: z.string().max(100 * 1024).optional(),
+  scripts: z.string().max(100 * 1024).optional(),
+  lazyLoad: bool.optional().default(false),
+  omitBackground: bool.optional().default(false),
+  reducedMotion: bool.optional().default(false),
+  blockChats: bool.optional().default(false),
+  latitude: num.min(-90).max(90).optional(),
+  longitude: num.min(-180).max(180).optional(),
+  accuracy: num.min(0).max(100000).optional(),
+  timezone: z.string().max(64).optional(),
+  locale: z.string().max(35).optional(),
+}).refine((d) => Boolean(d.url) !== Boolean(d.html), { message: 'Send either url or html', path: ['url'] })
+  .refine((d) => (d.latitude === undefined) === (d.longitude === undefined), { message: 'latitude and longitude go together', path: ['latitude'] });
 
 /** Accepte aussi les noms courts et en snake_case (full_page, width, dark_mode…). */
 const ALIASES: Record<string, string> = {
@@ -40,12 +56,17 @@ const ALIASES: Record<string, string> = {
   block_cookies: 'blockCookies', block_cookie_banners: 'blockCookies', block_ads: 'blockAds',
   user_agent: 'userAgent', dark_mode: 'darkMode', scale: 'deviceScaleFactor', device_scale_factor: 'deviceScaleFactor',
   retina: 'deviceScaleFactor', element: 'selector', cache_ttl: 'cacheTtl', cache: 'cacheTtl', type: 'format',
+  styles_css: 'styles', css: 'styles', js: 'scripts', script: 'scripts', lazy_load: 'lazyLoad', scroll: 'lazyLoad',
+  omit_background: 'omitBackground', transparent: 'omitBackground', reduced_motion: 'reducedMotion',
+  block_chats: 'blockChats', block_popups: 'blockChats', block_chats_and_popups: 'blockChats',
+  geolocation_latitude: 'latitude', geolocation_longitude: 'longitude', geolocation_accuracy: 'accuracy',
+  time_zone: 'timezone', lang: 'locale', language: 'locale',
 };
 
 function normalize(input: Record<string, unknown>) {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input)) {
-    if (k === 'access_key' || k === 'api_key') continue;
+    if (k === 'access_key' || k === 'api_key' || k === 'key_id' || k === 'signature') continue;
     const key = ALIASES[k] || k;
     out[key] = key === 'deviceScaleFactor' && k === 'retina' ? (v === 'true' || v === true ? 2 : 1) : v;
   }
@@ -54,7 +75,7 @@ function normalize(input: Record<string, unknown>) {
 
 const STATUS: Record<string, number> = {
   MISSING_API_KEY: 401, INVALID_API_KEY: 401, RATE_LIMIT_EXCEEDED: 429, INSUFFICIENT_CREDITS: 402,
-  NO_ACTIVE_SUBSCRIPTION: 403, VALIDATION_ERROR: 400, INVALID_URL: 400, SELECTOR_NOT_FOUND: 422,
+  NO_ACTIVE_SUBSCRIPTION: 403, INVALID_SIGNATURE: 401, SCRIPT_ERROR: 422, VALIDATION_ERROR: 400, INVALID_URL: 400, SELECTOR_NOT_FOUND: 422,
   TIMEOUT: 504, NETWORK_ERROR: 502, NAVIGATION_FAILED: 502, BUSY: 503, CAPTURE_FAILED: 500,
 };
 
@@ -85,9 +106,25 @@ function apiKeyFrom(request: NextRequest, query: URLSearchParams) {
 
 async function handle(request: NextRequest, raw: Record<string, unknown>) {
   const startTime = Date.now();
-  const apiKey = apiKeyFrom(request, request.nextUrl.searchParams);
-  if (!apiKey) {
-    return errorResponse('MISSING_API_KEY', 'Send your API key in the x-api-key header or the access_key parameter.');
+  const query = request.nextUrl.searchParams;
+  let apiKey: string | null = null;
+  let apiKeyId: string | undefined;
+
+  // URL signée : key_id public + signature HMAC, la clé ne circule pas
+  const keyId = query.get('key_id');
+  const signature = query.get('signature');
+  if (keyId || signature) {
+    if (!keyId || !signature) return errorResponse('INVALID_SIGNATURE', 'Signed URLs need both key_id and signature.');
+    const key = await new PrismaApiKeyRepository().findById(keyId);
+    if (!key?.signingSecret || !verifySignature(key.signingSecret, request.nextUrl.search, signature)) {
+      return errorResponse('INVALID_SIGNATURE', 'The signature does not match this URL. Sign the exact query string, without the signature parameter.');
+    }
+    apiKeyId = key.id;
+  } else {
+    apiKey = apiKeyFrom(request, query);
+    if (!apiKey) {
+      return errorResponse('MISSING_API_KEY', 'Send your API key in the x-api-key header or the access_key parameter, or use a signed URL.');
+    }
   }
 
   const parsed = schema.safeParse(normalize(raw));
@@ -112,8 +149,10 @@ async function handle(request: NextRequest, raw: Record<string, unknown>) {
   }
 
   const result = await createCaptureScreenshotUseCase(process.env.REDIS_URL).execute({
-    apiKey,
+    apiKey: apiKey || undefined,
+    apiKeyId,
     url: body.url,
+    html: body.html,
     format: body.format,
     quality: body.quality,
     viewportType: body.viewportType ?? (width || height ? 'CUSTOM' : 'DESKTOP'),
@@ -131,6 +170,18 @@ async function handle(request: NextRequest, raw: Record<string, unknown>) {
     selector: body.selector,
     delay: body.delay,
     cacheTtl: body.cacheTtl,
+    click: body.click,
+    styles: body.styles,
+    scripts: body.scripts,
+    lazyLoad: body.lazyLoad,
+    omitBackground: body.omitBackground,
+    reducedMotion: body.reducedMotion,
+    blockChats: body.blockChats,
+    geolocation: body.latitude !== undefined && body.longitude !== undefined
+      ? { latitude: body.latitude, longitude: body.longitude, accuracy: body.accuracy }
+      : undefined,
+    timezone: body.timezone,
+    locale: body.locale,
     ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip') || undefined,
     userAgentHeader: request.headers.get('user-agent') || undefined,
   });
@@ -155,7 +206,9 @@ async function handle(request: NextRequest, raw: Record<string, unknown>) {
     headers: {
       'Content-Type': contentType,
       'Content-Length': String(shot.fileSizeBytes),
-      'Cache-Control': body.cacheTtl ? `private, max-age=${body.cacheTtl}` : 'no-store',
+      // URL signée : les navigateurs et CDN peuvent garder l'image (même URL = même image)
+      'Cache-Control': body.cacheTtl ? `${apiKeyId ? 'public' : 'private'}, max-age=${body.cacheTtl}` : 'no-store',
+      ...(apiKeyId ? { 'Access-Control-Allow-Origin': '*' } : {}),
       'X-Cache': shot.cached ? 'HIT' : 'MISS',
       'X-Credits-Remaining': String(shot.creditsRemaining ?? ''),
       'X-Screenshot-Width': String(shot.width),
@@ -187,7 +240,7 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   const params = Object.fromEntries(request.nextUrl.searchParams.entries());
-  if (!params.url) {
+  if (!params.url && !params.html) {
     return NextResponse.json({
       service: 'ScreenAPI',
       usage: 'GET /api/v1/screenshot?url=https://example.com&access_key=YOUR_KEY or POST with a JSON body',

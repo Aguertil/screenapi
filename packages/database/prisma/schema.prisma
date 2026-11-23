@@ -91,6 +91,7 @@ model ApiKey {
   userId      String
   key         String    @unique // empreinte SHA-256 de la clé (jamais la clé en clair)
   prefix      String?   // début de la clé, pour l'afficher
+  signingSecret String? // secret des URL signées (key_id + signature), distinct de la clé
   name        String
   isActive    Boolean   @default(true)
   lastUsedAt  DateTime?

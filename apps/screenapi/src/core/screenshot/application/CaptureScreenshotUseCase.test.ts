@@ -38,6 +38,10 @@ class MockApiKeyRepository implements IApiKeyRepository {
     expiresAt: null,
   };
 
+  async findById(_id: string) {
+    return this.apiKey;
+  }
+
   async findByKey(_key: string) {
     return this.apiKey;
   }

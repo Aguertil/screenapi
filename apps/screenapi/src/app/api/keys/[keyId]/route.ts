@@ -3,10 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { generateSigningSecret } from '@/lib/signing';
 
 const updateKeySchema = z.object({
   name: z.string().min(1).optional(),
   isActive: z.boolean().optional(),
+  rotateSigningSecret: z.literal(true).optional(),
 });
 
 // PATCH /api/keys/[keyId] - Update API key
@@ -48,11 +50,11 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const data = updateKeySchema.parse(body);
+    const { rotateSigningSecret, ...data } = updateKeySchema.parse(body);
 
     const updatedKey = await prisma.apiKey.update({
       where: { id: params.keyId },
-      data,
+      data: { ...data, ...(rotateSigningSecret ? { signingSecret: generateSigningSecret() } : {}) },
     });
 
     return NextResponse.json({
@@ -60,7 +62,8 @@ export async function PATCH(
       key: {
         id: updatedKey.id,
         name: updatedKey.name,
-        key: updatedKey.key,
+        key: `${updatedKey.prefix || 'sk_live_'}…`,
+        signingSecret: updatedKey.signingSecret,
         isActive: updatedKey.isActive,
         rateLimit: updatedKey.rateLimit,
         lastUsedAt: updatedKey.lastUsedAt,

@@ -38,6 +38,14 @@ export class PrismaApiKeyRepository implements IApiKeyRepository {
     }
   }
 
+  async findById(id: string): Promise<ApiKeyData | null> {
+    const apiKey = await prisma.apiKey.findUnique({
+      where: { id },
+      select: { id: true, key: true, userId: true, isActive: true, rateLimit: true, expiresAt: true, signingSecret: true },
+    });
+    return apiKey;
+  }
+
   async updateLastUsed(keyId: string): Promise<void> {
     try {
       await prisma.apiKey.update({

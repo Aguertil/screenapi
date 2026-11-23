@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 const BASE = process.env.NEXT_PUBLIC_APP_URL || 'https://screenapi.example';
 
 const PARAMS: [string, string, string, string][] = [
-  ['url', 'string', 'required', 'Page to capture, starting with http:// or https://.'],
+  ['url', 'string', 'url or html', 'Page to capture, starting with http:// or https://.'],
+  ['html', 'string, up to 2 MB', 'url or html', 'Render your own HTML instead of a URL (invoices, social cards, emails). POST only in practice.'],
   ['format', 'png · jpeg · webp · pdf', 'png', 'Output format. PDF pages are A4 with backgrounds.'],
   ['quality', '1–100', '—', 'Compression quality for jpeg and webp.'],
   ['full_page', 'boolean', 'false', 'Capture the whole scrollable page instead of the visible area.'],
@@ -30,6 +31,16 @@ const PARAMS: [string, string, string, string][] = [
   ['hide', 'selectors, comma-separated', '—', 'Elements to hide before capturing (chat widgets, popups).'],
   ['block_cookies', 'boolean', 'true', 'Hide cookie consent banners.'],
   ['block_ads', 'boolean', 'false', 'Block common ad and tracking networks.'],
+  ['block_chats', 'boolean', 'false', 'Hide chat bubbles, newsletter popups and share bars (Intercom, Crisp, HubSpot…).'],
+  ['click', 'CSS selector', '—', 'Click this element before capturing (close a modal, open a tab).'],
+  ['styles', 'CSS, up to 100 KB', '—', 'Inject CSS before capturing. Alias: css.'],
+  ['scripts', 'JavaScript, up to 100 KB', '—', 'Run JavaScript in the page before capturing. Alias: js.'],
+  ['lazy_load', 'boolean', 'false', 'Scroll through the page first so lazy images load. Best with full_page.'],
+  ['omit_background', 'boolean', 'false', 'Transparent background for pages without one. png and webp only.'],
+  ['reduced_motion', 'boolean', 'false', 'Ask the page to turn off animations.'],
+  ['geolocation_latitude / _longitude', 'degrees', '—', 'Pretend to be at this place (store finders, local results). _accuracy in meters is optional.'],
+  ['timezone', 'IANA name', 'UTC', 'Browser time zone, e.g. Europe/Paris.'],
+  ['locale', 'language tag', 'en-US', 'Browser language, e.g. fr-FR. Also sets Accept-Language.'],
   ['user_agent', 'string', 'Chrome', 'Custom user agent.'],
   ['cache_ttl', 'seconds, 0–2592000', '0', 'Reuse an identical capture made within this time. Cache hits are free.'],
 ];
@@ -38,7 +49,9 @@ const ERRORS: [number, string, string][] = [
   [400, 'VALIDATION_ERROR', 'A parameter is missing or invalid. The details field lists which.'],
   [401, 'MISSING_API_KEY / INVALID_API_KEY', 'No key sent, or the key is unknown or revoked.'],
   [402, 'INSUFFICIENT_CREDITS', 'Monthly quota used up. It resets with your next billing month.'],
-  [422, 'SELECTOR_NOT_FOUND', 'The element or wait_for_selector never appeared.'],
+  [401, 'INVALID_SIGNATURE', 'The signed URL was changed, or signed with another secret.'],
+  [422, 'SELECTOR_NOT_FOUND', 'The element, click target or wait_for_selector never appeared.'],
+  [422, 'SCRIPT_ERROR', 'Your scripts parameter threw an error. The message says which.'],
   [429, 'RATE_LIMIT_EXCEEDED', 'Too many requests this minute for your plan. See Retry-After.'],
   [502, 'NAVIGATION_FAILED / NETWORK_ERROR', 'The target site could not be reached.'],
   [503, 'BUSY', 'All capture slots are busy. Retry after a few seconds.'],
@@ -57,7 +70,7 @@ export default function DocsPage() {
       <main className="mx-auto grid max-w-page gap-10 px-5 py-14 lg:grid-cols-[12rem_1fr]">
         <nav aria-label="On this page" className="hidden text-sm lg:block">
           <ul className="sticky top-6 space-y-2 text-muted">
-            {[['start', 'Quick start'], ['auth', 'Authentication'], ['request', 'Request'], ['params', 'Parameters'], ['response', 'Response'], ['errors', 'Errors'], ['devices', 'Devices'], ['limits', 'Limits']].map(([id, label]) => (
+            {[['start', 'Quick start'], ['auth', 'Authentication'], ['signed', 'Signed URLs'], ['request', 'Request'], ['params', 'Parameters'], ['response', 'Response'], ['errors', 'Errors'], ['devices', 'Devices'], ['limits', 'Limits']].map(([id, label]) => (
               <li key={id}><a href={`#${id}`} className="hover:text-ink">{label}</a></li>
             ))}
           </ul>
@@ -78,6 +91,26 @@ export default function DocsPage() {
             Send your key in the <code className="text-ink">x-api-key</code> header, or as <code className="text-ink">Authorization: Bearer YOUR_KEY</code>.
             For GET requests you can also pass <code className="text-ink">access_key=YOUR_KEY</code> in the URL. Only do this from your server:
             anyone who sees the URL can use your quota. Revoke a leaked key from the dashboard at any time.
+          </p>
+
+          <H2 id="signed">Signed URLs</H2>
+          <p className="max-w-3xl leading-relaxed text-muted">
+            To put a capture straight into an <code className="text-ink">&lt;img&gt;</code> tag without exposing your key, sign the URL.
+            Every key has a signing secret, shown in the dashboard. Build the query string with <code className="text-ink">key_id</code>,
+            compute an HMAC-SHA256 of that exact string with the secret, and add it as <code className="text-ink">signature</code>.
+            Anyone can load the link, but changing a single parameter breaks it. The dashboard URL builder does this for you.
+          </p>
+          <pre className="overflow-x-auto rounded-lg bg-surface p-4 text-sm"><code>{`// Node.js
+import { createHmac } from 'crypto';
+
+const query = new URLSearchParams({
+  url: 'https://example.com', format: 'webp', cache_ttl: '86400', key_id: 'YOUR_KEY_ID',
+}).toString();
+const signature = createHmac('sha256', process.env.SIGNING_SECRET).update(query).digest('hex');
+const src = \`${BASE}/api/v1/screenshot?\${query}&signature=\${signature}\`;`}</code></pre>
+          <p className="text-sm text-muted">
+            Add <code className="text-ink">cache_ttl</code> so repeat views are served from cache and cost nothing. Creating a new
+            signing secret in the dashboard turns off every link signed with the old one.
           </p>
 
           <H2 id="request">Request</H2>

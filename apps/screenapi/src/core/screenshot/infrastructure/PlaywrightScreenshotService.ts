@@ -149,7 +149,7 @@ export class PlaywrightScreenshotService implements IScreenshotService {
     let page: Page | null = null;
 
     try {
-      if (!(await isPublicUrl(options.url))) {
+      if (!options.isHtml && !(await isPublicUrl(options.url))) {
         return failure(
           new CaptureError('URL pointing to a private network is not allowed', 'NAVIGATION_FAILED') as CaptureError,
         );
@@ -161,7 +161,11 @@ export class PlaywrightScreenshotService implements IScreenshotService {
         deviceScaleFactor: options.deviceScaleFactor,
         userAgent: options.userAgent,
         colorScheme: options.darkMode ? 'dark' : 'light',
-        locale: 'en-US',
+        reducedMotion: options.reducedMotion ? 'reduce' : 'no-preference',
+        locale: options.locale || 'en-US',
+        timezoneId: options.timezone,
+        geolocation: options.geolocation,
+        permissions: options.geolocation ? ['geolocation'] : [],
         ignoreHTTPSErrors: true,
       });
 
@@ -183,12 +187,20 @@ export class PlaywrightScreenshotService implements IScreenshotService {
       await installNetworkGuard(context);
 
       page = await context.newPage();
-      const response = await page.goto(options.url, { waitUntil: 'load', timeout: options.waitForTimeout });
-      if (!response) {
-        return failure(new CaptureError('The page did not respond', 'NAVIGATION_FAILED') as CaptureError);
+      if (options.isHtml) {
+        // HTML fourni : ses ressources externes passent par le même garde réseau
+        await page.setContent(options.html as string, { waitUntil: 'load', timeout: options.waitForTimeout });
+      } else {
+        const response = await page.goto(options.url, { waitUntil: 'load', timeout: options.waitForTimeout });
+        if (!response) {
+          return failure(new CaptureError('The page did not respond', 'NAVIGATION_FAILED') as CaptureError);
+        }
       }
       // Laisser finir les chargements tardifs, sans bloquer sur les pages qui ne s'arrêtent jamais
       await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+
+      // Contenus chargés au défilement (images « lazy ») : descendre la page puis remonter
+      if (options.lazyLoad) await this.scrollThrough(page);
 
       if (options.waitForSelector) {
         try {
@@ -201,11 +213,32 @@ export class PlaywrightScreenshotService implements IScreenshotService {
       }
 
       if (options.blockCookies) await this.hideCookieBanners(page);
+      if (options.blockChats) await this.hideChatsAndPopups(page);
 
       if (options.hideElements.length > 0) {
         await page
           .addStyleTag({ content: options.hideElements.map((sel) => `${sel}{display:none!important}`).join('\n') })
           .catch(() => {});
+      }
+
+      if (options.styles) await page.addStyleTag({ content: options.styles }).catch(() => {});
+
+      if (options.scripts) {
+        try {
+          await page.evaluate(options.scripts);
+        } catch (error) {
+          return failure(new CaptureError(`Your script failed: ${(error as Error).message.split('\n')[0]}`, 'SCRIPT_ERROR', error as Error) as CaptureError);
+        }
+      }
+
+      if (options.click) {
+        try {
+          await page.click(options.click, { timeout: 5000 });
+          await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+          await page.waitForTimeout(300);
+        } catch (error) {
+          return failure(new CaptureError(`Element to click not found: ${options.click}`, 'SELECTOR_NOT_FOUND', error as Error) as CaptureError);
+        }
       }
 
       if (options.delay > 0) await page.waitForTimeout(options.delay);
@@ -225,6 +258,7 @@ export class PlaywrightScreenshotService implements IScreenshotService {
           // Playwright ne produit que PNG et JPEG : le WebP est converti ensuite (sharp)
           type: (type === 'webp' ? 'png' : type) as 'png' | 'jpeg',
           quality: type === 'jpeg' ? options.quality : undefined,
+          omitBackground: options.omitBackground,
         };
         if (options.selector) {
           const element = page.locator(options.selector).first();
@@ -286,46 +320,85 @@ export class PlaywrightScreenshotService implements IScreenshotService {
   /**
    * Hide common cookie consent banners
    */
+  /**
+   * Masque les bannières de consentement : outils les plus répandus (OneTrust, Didomi,
+   * Cookiebot, Axeptio, tarteaucitron, Usercentrics, Quantcast, CookieYes, Complianz,
+   * iubenda, Osano, TrustArc, Sourcepoint…) puis heuristique générique.
+   */
   private async hideCookieBanners(page: Page): Promise<void> {
-    const cookieBannerSelectors = [
-      '#cookie-banner',
-      '.cookie-banner',
-      '#cookie-consent',
-      '.cookie-consent',
-      '#gdpr-banner',
-      '.gdpr-banner',
-      '[id*="cookie"]',
-      '[class*="cookie"]',
-      '[id*="gdpr"]',
-      '[class*="gdpr"]',
-      '[aria-label*="cookie"]',
-      '[aria-label*="consent"]',
+    const known = [
+      '#onetrust-consent-sdk', '#onetrust-banner-sdk', '#didomi-host', '#didomi-notice', '#CybotCookiebotDialog',
+      '#CybotCookiebotDialogBodyUnderlay', '#axeptio_overlay', '#axeptio_main_button', '#tarteaucitronRoot',
+      '#usercentrics-root', '#usercentrics-cmp-ui', '.qc-cmp2-container', '#qc-cmp2-container', '.cky-consent-container',
+      '.cky-overlay', '#cmplz-cookiebanner-container', '.cmplz-cookiebanner', '#iubenda-cs-banner', '.osano-cm-window',
+      '#truste-consent-track', '#consent_blackbar', '[id^="sp_message_container"]', '.fc-consent-root', '#cookie-law-info-bar',
+      '#cookie-notice', '#cookieConsent', '#cookie-banner', '.cookie-banner', '#cookie-consent', '.cookie-consent',
+      '#gdpr-banner', '.gdpr-banner', '#CookieBanner', '.cc-window', '.cc-banner', '#hs-eu-cookie-confirmation',
     ];
-
     try {
-      await page.evaluate((selectors) => {
-        selectors.forEach((selector) => {
-          try {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach((el) => {
-              const htmlEl = el as HTMLElement;
-              // Only hide if element is visible and near top/bottom
-              const rect = htmlEl.getBoundingClientRect();
-              if (
-                rect.height > 50 &&
-                (rect.top < 200 || rect.bottom > window.innerHeight - 200)
-              ) {
-                htmlEl.style.display = 'none';
-              }
-            });
-          } catch {
-            // Ignore errors for individual selectors
-          }
+      await page.addStyleTag({ content: `${known.join(',')}{display:none!important}` });
+      await page.evaluate(() => {
+        document.documentElement.style.overflow = '';
+        document.body.style.overflow = '';
+        const words = /(cookie|consent|gdpr|rgpd|privacy|confidentialit)/i;
+        document.querySelectorAll<HTMLElement>('div, section, aside, dialog, footer').forEach((el) => {
+          const style = getComputedStyle(el);
+          if (style.position !== 'fixed' && style.position !== 'sticky') return;
+          const rect = el.getBoundingClientRect();
+          if (rect.height < 40) return;
+          const label = `${el.id} ${el.className} ${el.getAttribute('aria-label') || ''} ${el.innerText.slice(0, 300)}`;
+          if (words.test(label)) el.style.setProperty('display', 'none', 'important');
         });
-      }, cookieBannerSelectors);
-    } catch (error) {
-      // Ignore if hiding fails
-      console.warn('Failed to hide cookie banners:', error);
+      });
+    } catch {
+      /* page sans corps ou script bloqué : on capture quand même */
+    }
+  }
+
+  /** Masque les bulles de discussion, fenêtres surgissantes et boutons de partage. */
+  private async hideChatsAndPopups(page: Page): Promise<void> {
+    const selectors = [
+      '#intercom-container', '.intercom-lightweight-app', '#crisp-chatbox', '.crisp-client', '#drift-widget',
+      '#drift-frame-controller', '#hubspot-messages-iframe-container', '#launcher', '#webWidget', 'iframe[title*="chat" i]',
+      '#tidio-chat', '#tawkchat-container', '.tawk-min-container', '#fc_frame', '.zsiq_floatmain', '#chat-widget-container',
+      '#livechat-compact-container', '[class*="chat-widget"]', '.olark-launch-button', '#shopify-chat',
+      '.addthis-smartlayers', '.a2a_kit', '.sharethis-sticky-share-buttons', '#at4-share', '.st-sticky-share-buttons',
+    ];
+    try {
+      await page.addStyleTag({ content: `${selectors.join(',')}{display:none!important}` });
+      await page.evaluate(() => {
+        // Fenêtres modales qui couvrent la page (newsletter, promotion…)
+        document.querySelectorAll<HTMLElement>('div, section, dialog').forEach((el) => {
+          const style = getComputedStyle(el);
+          if (style.position !== 'fixed') return;
+          const r = el.getBoundingClientRect();
+          const coversScreen = r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
+          const isModal = el.getAttribute('role') === 'dialog' || el.getAttribute('aria-modal') === 'true' || /modal|popup|overlay|newsletter/i.test(el.className.toString());
+          if (coversScreen || isModal) el.style.setProperty('display', 'none', 'important');
+        });
+        document.documentElement.style.overflow = '';
+        document.body.style.overflow = '';
+      });
+    } catch {
+      /* rien à masquer */
+    }
+  }
+
+  /** Fait défiler la page jusqu'en bas (images chargées au défilement), puis remonte. */
+  private async scrollThrough(page: Page): Promise<void> {
+    try {
+      await page.evaluate(async () => {
+        const step = Math.max(200, Math.floor(innerHeight * 0.8));
+        const max = Math.min(document.documentElement.scrollHeight, 30000);
+        for (let y = 0; y < max; y += step) {
+          scrollTo(0, y);
+          await new Promise((r) => setTimeout(r, 120));
+        }
+        scrollTo(0, 0);
+      });
+      await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+    } catch {
+      /* défilement impossible : on capture quand même */
     }
   }
 

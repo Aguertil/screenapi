@@ -7,12 +7,13 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { SiteHeader } from '@/components/site/SiteHeader';
 import { getPlan } from '@/lib/plans';
+import { UrlBuilder } from '@/components/dashboard/UrlBuilder';
 
 interface Usage {
   subscription: { plan: string; status: string; creditsTotal: number; creditsUsed: number; creditsRemaining: number; currentPeriodEnd: string | null; cancelAtPeriodEnd: boolean };
   usage: { today: { total: number; successful: number; failed: number }; thisMonth: { total: number; successful: number; failed: number }; last7Days: { date: string; count: number }[] };
 }
-interface ApiKey { id: string; name: string; key: string; isActive: boolean; lastUsedAt: string | null; createdAt: string }
+interface ApiKey { id: string; name: string; key: string; signingSecret?: string | null; isActive: boolean; lastUsedAt: string | null; createdAt: string }
 
 const BASE = process.env.NEXT_PUBLIC_APP_URL || '';
 
@@ -53,6 +54,12 @@ function Dashboard() {
     if (!confirm(`Revoke the key "${key.name}"? Apps using it will stop working.`)) return;
     await fetch(`/api/keys/${key.id}`, { method: 'DELETE' });
     load();
+  }
+
+  async function rotateSecret(id: string) {
+    const res = await fetch(`/api/keys/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rotateSigningSecret: true }) });
+    if (!res.ok) { setError('Could not create a new signing secret.'); return; }
+    await load();
   }
 
   async function billing() {
@@ -178,6 +185,12 @@ function Dashboard() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="mt-12">
+        <h2 className="text-xl font-semibold">URL builder</h2>
+        <p className="mt-1 text-sm text-muted">Pick your options and get a signed link you can paste straight into a web page.</p>
+        <UrlBuilder keys={keys} base={typeof window !== 'undefined' ? window.location.origin : BASE} onRotate={rotateSecret} />
       </section>
 
       <p className="mt-10 text-sm text-muted">

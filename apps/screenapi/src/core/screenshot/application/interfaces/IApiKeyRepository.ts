@@ -5,6 +5,7 @@ export interface ApiKeyData {
   isActive: boolean;
   rateLimit: number;
   expiresAt: Date | null;
+  signingSecret?: string | null;
 }
 
 export interface IApiKeyRepository {
@@ -12,6 +13,9 @@ export interface IApiKeyRepository {
    * Find an API key by its key value
    */
   findByKey(key: string): Promise<ApiKeyData | null>;
+
+  /** Find an API key by its public id (signed URLs) */
+  findById(id: string): Promise<ApiKeyData | null>;
 
   /**
    * Update the last used timestamp for an API key

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateApiKey } from '@/lib/apiKeys';
 import { getPlan } from '@/lib/plans';
+import { generateSigningSecret } from '@/lib/signing';
 import { z } from 'zod';
 
 const createKeySchema = z.object({
@@ -38,12 +39,19 @@ export async function GET() {
       );
     }
 
+    // Clés créées avant les URL signées : leur donner un secret
+    for (const k of user.apiKeys.filter((k) => !k.signingSecret)) {
+      k.signingSecret = generateSigningSecret();
+      await prisma.apiKey.update({ where: { id: k.id }, data: { signingSecret: k.signingSecret } });
+    }
+
     return NextResponse.json({
       success: true,
       keys: user.apiKeys.map((key) => ({
         id: key.id,
         name: key.name,
         key: `${key.prefix || 'sk_live_'}…`,
+        signingSecret: key.signingSecret,
         isActive: key.isActive,
         rateLimit: key.rateLimit,
         lastUsedAt: key.lastUsedAt,
@@ -98,6 +106,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         key: generated.hash,
         prefix: generated.prefix,
+        signingSecret: generateSigningSecret(),
         name,
         isActive: true,
         rateLimit,
@@ -110,6 +119,7 @@ export async function POST(request: NextRequest) {
         id: newKey.id,
         name: newKey.name,
         key: generated.key, // montrée une seule fois
+        signingSecret: newKey.signingSecret,
         isActive: newKey.isActive,
         rateLimit: newKey.rateLimit,
         createdAt: newKey.createdAt,
